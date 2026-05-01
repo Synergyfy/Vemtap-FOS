@@ -7,8 +7,12 @@ import {
   Percent, 
   Wallet,
   Download,
-  Calendar
+  Calendar,
+  Info
 } from "lucide-react";
+import { useState } from "react";
+import { InfoTooltip } from "@/components/InfoTooltip";
+import { exportToCSV } from "@/lib/export";
 import {
   ComposedChart,
   Bar,
@@ -28,12 +32,12 @@ const formatNaira = (value: number) => {
 };
 
 // --- MOCK DATA ---
-const generateMonthlyData = () => {
+const generateMonthlyData = (multiplier: number) => {
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
   return months.map(month => {
-    const revenue = Math.floor(Math.random() * 5000000 + 10000000); // 10M-15M
+    const revenue = Math.floor(Math.random() * 5000000 + 10000000) * multiplier; // 10M-15M * multiplier
     const cogs = Math.floor(revenue * 0.15); // COGS 15%
-    const opex = Math.floor(Math.random() * 2000000 + 3000000); // 3M-5M
+    const opex = Math.floor(Math.random() * 2000000 + 3000000) * multiplier; // 3M-5M * multiplier
     const expenses = cogs + opex;
     const profit = revenue - expenses;
     const margin = (profit / revenue) * 100;
@@ -48,63 +52,92 @@ const generateMonthlyData = () => {
   });
 };
 
-const chartData = generateMonthlyData();
+const generatePnlStatement = (multiplier: number) => {
+  const m = multiplier;
+  return [
+    { category: "Gross Revenue", type: "header", amount: 0 },
+    { category: "Subscription Revenue", type: "item", amount: 8500000 * m },
+    { category: "SMS Revenue", type: "item", amount: 3200000 * m },
+    { category: "Email Revenue", type: "item", amount: 1500000 * m },
+    { category: "QRThrive Revenue", type: "item", amount: 2800000 * m },
+    { category: "Total Gross Revenue", type: "summary", amount: 16000000 * m },
+    
+    { category: "Cost of Goods Sold (COGS)", type: "header", amount: 0 },
+    { category: "SMS API Costs", type: "item", amount: -1200000 * m },
+    { category: "Email API Costs", type: "item", amount: -500000 * m },
+    { category: "Payment Gateway Fees", type: "item", amount: -240000 * m },
+    { category: "Total COGS", type: "summary", amount: -1940000 * m },
+    
+    { category: "Gross Profit", type: "total", amount: 14060000 * m },
 
-const pnlStatement = [
-  { category: "Gross Revenue", type: "header", amount: 0 },
-  { category: "Subscription Revenue", type: "item", amount: 8500000 },
-  { category: "SMS Revenue", type: "item", amount: 3200000 },
-  { category: "Email Revenue", type: "item", amount: 1500000 },
-  { category: "QRThrive Revenue", type: "item", amount: 2800000 },
-  { category: "Total Gross Revenue", type: "summary", amount: 16000000 },
-  
-  { category: "Cost of Goods Sold (COGS)", type: "header", amount: 0 },
-  { category: "SMS API Costs", type: "item", amount: -1200000 },
-  { category: "Email API Costs", type: "item", amount: -500000 },
-  { category: "Payment Gateway Fees", type: "item", amount: -240000 },
-  { category: "Total COGS", type: "summary", amount: -1940000 },
-  
-  { category: "Gross Profit", type: "total", amount: 14060000 },
+    { category: "Operating Expenses (OPEX)", type: "header", amount: 0 },
+    { category: "Agent Commissions", type: "item", amount: -2400000 * m },
+    { category: "Manager Commissions", type: "item", amount: -800000 * m },
+    { category: "Server & Hosting", type: "item", amount: -450000 * m },
+    { category: "Marketing & Ads", type: "item", amount: -1200000 * m },
+    { category: "Salaries & Payroll", type: "item", amount: -3500000 * m },
+    { category: "Total OPEX", type: "summary", amount: -8350000 * m },
 
-  { category: "Operating Expenses (OPEX)", type: "header", amount: 0 },
-  { category: "Agent Commissions", type: "item", amount: -2400000 },
-  { category: "Manager Commissions", type: "item", amount: -800000 },
-  { category: "Server & Hosting", type: "item", amount: -450000 },
-  { category: "Marketing & Ads", type: "item", amount: -1200000 },
-  { category: "Salaries & Payroll", type: "item", amount: -3500000 },
-  { category: "Total OPEX", type: "summary", amount: -8350000 },
-
-  { category: "Net Profit", type: "total_final", amount: 5710000 },
-];
+    { category: "Net Profit", type: "total_final", amount: 5710000 * m },
+  ];
+};
 
 export default function ProfitAndLossPage() {
+  const [timeRange, setTimeRange] = useState("30days");
+
+  const multiplier = useMemo(() => {
+    switch (timeRange) {
+      case "30days": return 1;
+      case "90days": return 3;
+      case "year": return 12;
+      default: return 1;
+    }
+  }, [timeRange]);
+
+  const chartData = useMemo(() => generateMonthlyData(multiplier), [multiplier]);
+  const pnlStatement = useMemo(() => generatePnlStatement(multiplier), [multiplier]);
   
   const { summaryStats } = useMemo(() => {
     // Current month is the last one in the mock array
     const currentMonth = chartData[chartData.length - 1];
 
     const stats = [
-      { label: "Gross Revenue (MTD)", value: formatNaira(currentMonth.revenue), icon: TrendingUp, color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-900/30" },
-      { label: "Total Expenses (MTD)", value: formatNaira(currentMonth.expenses), icon: TrendingDown, color: "text-red-500", bg: "bg-red-50 dark:bg-red-900/30" },
-      { label: "Net Profit (MTD)", value: formatNaira(currentMonth.profit), icon: Wallet, color: "text-green-500", bg: "bg-green-50 dark:bg-green-900/30" },
-      { label: "Net Profit Margin", value: `${currentMonth.margin}%`, icon: Percent, color: "text-purple-500", bg: "bg-purple-50 dark:bg-purple-900/30" },
+      { label: "Gross Revenue (Selected)", value: formatNaira(currentMonth.revenue), tooltip: "Total incoming revenue before any deductions.", icon: TrendingUp, color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-900/30" },
+      { label: "Total Expenses (Selected)", value: formatNaira(currentMonth.expenses), tooltip: "Sum of all OPEX and COGS.", icon: TrendingDown, color: "text-red-500", bg: "bg-red-50 dark:bg-red-900/30" },
+      { label: "Net Profit (Selected)", value: formatNaira(currentMonth.profit), tooltip: "Total profit remaining after all expenses are deducted.", icon: Wallet, color: "text-green-500", bg: "bg-green-50 dark:bg-green-900/30" },
+      { label: "Net Profit Margin", value: `${currentMonth.margin}%`, tooltip: "Percentage of revenue that remains as profit.", icon: Percent, color: "text-purple-500", bg: "bg-purple-50 dark:bg-purple-900/30" },
     ];
 
     return { summaryStats: stats };
-  }, []);
+  }, [chartData]);
 
   return (
     <div className="space-y-8 pb-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Profit & Loss Statement</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center">
+            Profit & Loss Statement
+            <InfoTooltip content="A comprehensive breakdown of your business's financial health, tracking revenue vs expenses." />
+          </h1>
           <p className="text-zinc-500">Track company profitability, margins, and operational efficiency.</p>
         </div>
         <div className="flex gap-3">
           <div className="flex items-center gap-2 px-3 py-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            <Calendar className="w-4 h-4" /> This Month
+            <Calendar className="w-4 h-4" />
+            <select 
+              value={timeRange}
+              onChange={(e) => setTimeRange(e.target.value)}
+              className="bg-transparent text-sm text-zinc-700 dark:text-zinc-300 focus:outline-none cursor-pointer"
+            >
+              <option value="30days">This Month</option>
+              <option value="90days">This Quarter</option>
+              <option value="year">This Year</option>
+            </select>
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-50 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 rounded-lg font-medium transition-colors">
+          <button 
+            onClick={() => exportToCSV(pnlStatement, "pnl_statement")}
+            className="flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-50 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 rounded-lg font-medium transition-colors"
+          >
             <Download className="w-4 h-4" /> Export P&L
           </button>
         </div>
@@ -118,7 +151,10 @@ export default function ProfitAndLossPage() {
               <stat.icon className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-sm font-medium text-zinc-500">{stat.label}</p>
+              <p className="text-sm font-medium text-zinc-500 flex items-center">
+                {stat.label}
+                <InfoTooltip content={stat.tooltip} />
+              </p>
               <h3 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{stat.value}</h3>
             </div>
           </div>
@@ -129,6 +165,7 @@ export default function ProfitAndLossPage() {
       <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm p-6">
         <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 mb-6 flex items-center gap-2">
           <TrendingUp className="w-5 h-5 text-blue-500" /> Revenue vs Expenses & Margin Trend
+          <InfoTooltip content="Historical overview of total revenue, expenses, and net margin percentage." />
         </h2>
         
         <div className="h-80 w-full">
@@ -153,8 +190,9 @@ export default function ProfitAndLossPage() {
 
       {/* P&L TABLE */}
       <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
-        <div className="border-b border-zinc-200 dark:border-zinc-800 p-6">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Detailed P&L Statement (MTD)</h2>
+        <div className="border-b border-zinc-200 dark:border-zinc-800 p-6 flex items-center">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Detailed P&L Statement (Selected Period)</h2>
+          <InfoTooltip content="Line-by-line breakdown of all income and expenses." />
         </div>
         
         <div className="overflow-x-auto">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
@@ -20,7 +20,9 @@ import {
   Target,
   Mail,
   LogOut,
-  ChevronDown
+  ChevronDown,
+  Menu,
+  X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -47,18 +49,44 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Close sidebar on route change for mobile
+  useEffect(() => {
+    setIsSidebarOpen(false);
+  }, [pathname]);
 
   return (
-    <div className="flex h-screen bg-zinc-50 dark:bg-zinc-950">
+    <div className="flex h-screen bg-zinc-50 dark:bg-zinc-950 overflow-hidden">
+      
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-64 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col">
-        <div className="p-6 border-b border-zinc-200 dark:border-zinc-800">
+      <aside 
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 w-64 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0",
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <div className="p-6 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight">
             <div className="w-8 h-8 bg-zinc-900 dark:bg-zinc-50 rounded-lg flex items-center justify-center">
               <span className="text-zinc-50 dark:text-zinc-900 text-sm">V</span>
             </div>
             Vemtap FOS
           </Link>
+          <button 
+            className="md:hidden text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-50"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <X className="w-6 h-6" />
+          </button>
         </div>
         
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto hide-scrollbar">
@@ -79,7 +107,7 @@ export default function DashboardLayout({
 
         <div className="p-4 border-t border-zinc-200 dark:border-zinc-800">
           <Link href="/profile" className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors group">
-            <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 transition-colors">
+            <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 transition-colors shrink-0">
               <User className="w-4 h-4 text-zinc-500 group-hover:text-blue-600 dark:group-hover:text-blue-400" />
             </div>
             <div className="flex-1 min-w-0">
@@ -93,32 +121,40 @@ export default function DashboardLayout({
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Topbar */}
-        <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-8 relative">
-          
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 capitalize">
-            {pathname.split('/')[1]?.replace('-', ' ') || 'Overview'}
-          </h2>
+        <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-4 sm:px-8 relative shrink-0">
           
           <div className="flex items-center gap-4">
+            <button 
+              className="md:hidden text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-50"
+              onClick={() => setIsSidebarOpen(true)}
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 capitalize truncate hidden sm:block">
+              {pathname.split('/')[1]?.replace('-', ' ') || 'Overview'}
+            </h2>
+          </div>
+          
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
             
             {/* Notifications Button */}
-            <Link href="/notifications" className="relative p-2 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer">
+            <Link href="/notifications" className="relative p-2 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer shrink-0">
               <Bell className="w-5 h-5" />
               <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-zinc-900"></span>
             </Link>
             
-            <div className="h-8 w-[1px] bg-zinc-200 dark:border-zinc-800 mx-2" />
+            <div className="h-8 w-[1px] bg-zinc-200 dark:border-zinc-800 mx-1 sm:mx-2 hidden sm:block" />
             
             {/* Avatar Dropdown */}
             <div className="relative">
               <button 
                 onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
-                className="flex items-center gap-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 p-1 pr-2 rounded-full transition-colors cursor-pointer"
+                className="flex items-center gap-1 sm:gap-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 p-1 pr-1 sm:pr-2 rounded-full transition-colors cursor-pointer shrink-0"
               >
-                <div className="w-8 h-8 rounded-full bg-zinc-900 dark:bg-zinc-50 flex items-center justify-center overflow-hidden border border-zinc-200 dark:border-zinc-700">
+                <div className="w-8 h-8 rounded-full bg-zinc-900 dark:bg-zinc-50 flex items-center justify-center overflow-hidden border border-zinc-200 dark:border-zinc-700 shrink-0">
                   <User className="w-5 h-5 text-zinc-100 dark:text-zinc-800 mt-1" />
                 </div>
-                <ChevronDown className="w-4 h-4 text-zinc-500" />
+                <ChevronDown className="w-4 h-4 text-zinc-500 hidden sm:block" />
               </button>
 
               {/* Dropdown Menu */}
@@ -160,7 +196,7 @@ export default function DashboardLayout({
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-8">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-8">
           {children}
         </main>
       </div>

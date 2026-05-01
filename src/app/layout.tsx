@@ -15,6 +15,16 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Vemtap FOS",
   description: "Vemtap Front Office System",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Vemtap FOS",
+  },
+};
+
+export const viewport = {
+  themeColor: "#3b82f6",
 };
 
 export default function RootLayout({
