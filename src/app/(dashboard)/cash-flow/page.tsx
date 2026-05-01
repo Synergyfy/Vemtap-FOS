@@ -7,8 +7,12 @@ import {
   Wallet, 
   Clock,
   Download,
-  Calendar
+  Calendar,
+  Info
 } from "lucide-react";
+import { useState } from "react";
+import { InfoTooltip } from "@/components/InfoTooltip";
+import { exportToCSV } from "@/lib/export";
 import {
   AreaChart,
   Area,
@@ -27,11 +31,11 @@ const formatNaira = (value: number) => {
 };
 
 // --- MOCK DATA ---
-const generateCashFlowData = () => {
+const generateCashFlowData = (days: number) => {
   const data = [];
-  const startObj = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const startObj = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < days; i++) {
     const date = new Date(startObj.getTime() + i * 24 * 60 * 60 * 1000);
     const dayName = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     
@@ -40,7 +44,8 @@ const generateCashFlowData = () => {
     const outflow = Math.floor(Math.random() * 400000 + 100000);
     
     // Create specific spike days (e.g., payroll or commission payouts)
-    const finalOutflow = (i === 15 || i === 28) ? outflow + 1500000 : outflow;
+    const isSpike = (i % 15 === 0) && i !== 0;
+    const finalOutflow = isSpike ? outflow + 1500000 : outflow;
     
     data.push({
       date: dayName,
@@ -52,14 +57,13 @@ const generateCashFlowData = () => {
   return data;
 };
 
-const chartData = generateCashFlowData();
-
-const generateLedger = () => {
+const generateLedger = (multiplier: number) => {
   const ledger = [];
   const inboundCategories = ["Stripe Settlement", "Paystack Settlement", "Manual Wire"];
   const outboundCategories = ["Agent Commission Payout", "AWS Invoice", "Salary Run", "Meta Ads Billing"];
   
-  for (let i = 1; i <= 25; i++) {
+  const numItems = Math.max(5, Math.floor(25 * multiplier));
+  for (let i = 1; i <= numItems; i++) {
     const isOutbound = Math.random() > 0.6;
     const amount = isOutbound ? Math.floor(Math.random() * 500000 + 50000) : Math.floor(Math.random() * 800000 + 100000);
     const category = isOutbound ? outboundCategories[Math.floor(Math.random() * outboundCategories.length)] : inboundCategories[Math.floor(Math.random() * inboundCategories.length)];
@@ -69,15 +73,28 @@ const generateLedger = () => {
       type: isOutbound ? "Outflow" : "Inflow",
       description: category,
       amount: amount,
-      date: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
+      // Spread dates across the selected period multiplier loosely (1 mult = ~1 month)
+      date: new Date(Date.now() - Math.random() * 30 * multiplier * 24 * 60 * 60 * 1000).toISOString(),
     });
   }
   return ledger.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 };
 
-const ledgerData = generateLedger();
-
 export default function CashFlowPage() {
+  const [timeRange, setTimeRange] = useState("30days");
+
+  const { days, multiplier } = useMemo(() => {
+    switch (timeRange) {
+      case "7days": return { days: 7, multiplier: 0.25 };
+      case "30days": return { days: 30, multiplier: 1 };
+      case "90days": return { days: 90, multiplier: 3 };
+      case "year": return { days: 365, multiplier: 12 };
+      default: return { days: 30, multiplier: 1 };
+    }
+  }, [timeRange]);
+
+  const chartData = useMemo(() => generateCashFlowData(days), [days]);
+  const ledgerData = useMemo(() => generateLedger(multiplier), [multiplier]);
   
   const { summaryStats } = useMemo(() => {
     const totalInflow = chartData.reduce((sum, d) => sum + d.inflow, 0);
@@ -85,27 +102,43 @@ export default function CashFlowPage() {
     const netCash = totalInflow - totalOutflow;
 
     const stats = [
-      { label: "Total Cash Inflow (30d)", value: formatNaira(totalInflow), icon: ArrowUpRight, color: "text-green-500", bg: "bg-green-50 dark:bg-green-900/30" },
-      { label: "Total Cash Outflow (30d)", value: formatNaira(totalOutflow), icon: ArrowDownRight, color: "text-red-500", bg: "bg-red-50 dark:bg-red-900/30" },
-      { label: "Net Cash Position", value: formatNaira(netCash), icon: Wallet, color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-900/30" },
-      { label: "Est. Runway", value: "14.2 Months", icon: Clock, color: "text-purple-500", bg: "bg-purple-50 dark:bg-purple-900/30" },
+      { label: `Total Cash Inflow (${timeRange})`, value: formatNaira(totalInflow), tooltip: "Total cash received in the selected period.", icon: ArrowUpRight, color: "text-green-500", bg: "bg-green-50 dark:bg-green-900/30" },
+      { label: `Total Cash Outflow (${timeRange})`, value: formatNaira(totalOutflow), tooltip: "Total cash spent in the selected period.", icon: ArrowDownRight, color: "text-red-500", bg: "bg-red-50 dark:bg-red-900/30" },
+      { label: "Net Cash Position", value: formatNaira(netCash), tooltip: "Difference between inflow and outflow.", icon: Wallet, color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-900/30" },
+      { label: "Est. Runway", value: "14.2 Months", tooltip: "Estimated time before cash reserves are depleted based on current burn rate.", icon: Clock, color: "text-purple-500", bg: "bg-purple-50 dark:bg-purple-900/30" },
     ];
 
     return { summaryStats: stats };
-  }, []);
+  }, [chartData, timeRange]);
 
   return (
     <div className="space-y-8 pb-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Cash Flow Monitor</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center">
+            Cash Flow Monitor
+            <InfoTooltip content="Track real-time liquid cash movements and bank settlements." />
+          </h1>
           <p className="text-zinc-500">Track liquid cash movements, bank settlements, and runway.</p>
         </div>
         <div className="flex gap-3">
           <div className="flex items-center gap-2 px-3 py-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            <Calendar className="w-4 h-4" /> Last 30 Days
+            <Calendar className="w-4 h-4" />
+            <select 
+              value={timeRange}
+              onChange={(e) => setTimeRange(e.target.value)}
+              className="bg-transparent text-sm text-zinc-700 dark:text-zinc-300 focus:outline-none cursor-pointer"
+            >
+              <option value="7days">Last 7 Days</option>
+              <option value="30days">Last 30 Days</option>
+              <option value="90days">Last 90 Days</option>
+              <option value="year">Last 1 Year</option>
+            </select>
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-50 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 rounded-lg font-medium transition-colors">
+          <button 
+            onClick={() => exportToCSV(ledgerData, "cash_ledger_data")}
+            className="flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-50 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 rounded-lg font-medium transition-colors"
+          >
             <Download className="w-4 h-4" /> Export Ledger
           </button>
         </div>
@@ -119,7 +152,10 @@ export default function CashFlowPage() {
               <stat.icon className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-sm font-medium text-zinc-500">{stat.label}</p>
+              <p className="text-sm font-medium text-zinc-500 flex items-center">
+                {stat.label}
+                <InfoTooltip content={stat.tooltip} />
+              </p>
               <h3 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{stat.value}</h3>
             </div>
           </div>
@@ -129,7 +165,8 @@ export default function CashFlowPage() {
       {/* CASH FLOW CHART */}
       <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm p-6">
         <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 mb-6 flex items-center gap-2">
-          <Wallet className="w-5 h-5 text-blue-500" /> Cash Movement Trend (Daily)
+          <Wallet className="w-5 h-5 text-blue-500" /> Cash Movement Trend
+          <InfoTooltip content="Visualize cash coming in vs cash going out over time." />
         </h2>
         
         <div className="h-80 w-full">
@@ -163,7 +200,10 @@ export default function CashFlowPage() {
       {/* CASH LEDGER TABLE */}
       <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
         <div className="border-b border-zinc-200 dark:border-zinc-800 p-6 flex justify-between items-center">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Recent Cash Movements</h2>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 flex items-center">
+            Recent Cash Movements
+            <InfoTooltip content="Chronological ledger of recent transactions affecting liquid cash." />
+          </h2>
         </div>
         
         <div className="overflow-x-auto max-h-[500px] overflow-y-auto">

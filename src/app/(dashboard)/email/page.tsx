@@ -7,8 +7,13 @@ import {
   DollarSign, 
   Award,
   ChevronRight,
-  Filter
+  Filter,
+  Calendar,
+  Download,
+  Info
 } from "lucide-react";
+import { InfoTooltip } from "@/components/InfoTooltip";
+import { exportToCSV } from "@/lib/export";
 import {
   AreaChart,
   Area,
@@ -25,12 +30,11 @@ const formatNaira = (value: number) => {
   return `₦${value.toLocaleString()}`;
 };
 
-// --- MOCK DATA ---
-const generateEmailData = () => {
+const generateEmailData = (multiplier: number) => {
   const data = [];
-  let currentVol = 250000;
+  let currentVol = 250000 * multiplier;
   for (let i = 0; i < 6; i++) {
-    currentVol += Math.random() * 50000 + 20000;
+    currentVol += (Math.random() * 50000 + 20000) * multiplier;
     data.push({
       month: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"][i],
       volume: Math.floor(currentVol),
@@ -40,14 +44,12 @@ const generateEmailData = () => {
   return data;
 };
 
-const chartData = generateEmailData();
-
-const generatePurchases = () => {
+const generatePurchases = (multiplier: number) => {
   const businesses = ["ShopRite", "Lagos Logistics", "Tech Hub Inc", "Retail Business 4", "Local Supermarket"];
   const purchases = [];
   
   for (let i = 1; i <= 20; i++) {
-    const credits = Math.floor(Math.random() * 500000) + 10000;
+    const credits = Math.floor(Math.random() * 500000 * multiplier) + 10000;
     purchases.push({
       id: `TRX-EML-${Math.floor(Math.random() * 100000).toString().padStart(5, '0')}`,
       business: businesses[Math.floor(Math.random() * businesses.length)],
@@ -59,29 +61,68 @@ const generatePurchases = () => {
   return purchases.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 };
 
-const recentPurchases = generatePurchases();
-
 export default function EmailTrackerPage() {
-  
+  const [timeRange, setTimeRange] = useState("30days");
+
+  const multiplier = useMemo(() => {
+    switch (timeRange) {
+      case "7days": return 0.25;
+      case "30days": return 1;
+      case "90days": return 3;
+      case "year": return 12;
+      default: return 1;
+    }
+  }, [timeRange]);
+
+  const chartData = useMemo(() => generateEmailData(multiplier), [multiplier]);
+  const recentPurchases = useMemo(() => generatePurchases(multiplier), [multiplier]);
+
   const { summaryStats } = useMemo(() => {
     const totalVolume = chartData.reduce((sum, d) => sum + d.volume, 0);
     const totalRevenue = chartData.reduce((sum, d) => sum + d.revenue, 0);
 
     const stats = [
-      { label: "Total Email Revenue", value: formatNaira(totalRevenue), icon: DollarSign, color: "text-green-500", bg: "bg-green-50 dark:bg-green-900/30" },
-      { label: "Total Emails Sold", value: `${(totalVolume / 1000000).toFixed(1)}M`, icon: Mail, color: "text-amber-500", bg: "bg-amber-50 dark:bg-amber-900/30" },
-      { label: "Avg Cost / 10k", value: "₦5,000", icon: TrendingUp, color: "text-purple-500", bg: "bg-purple-50 dark:bg-purple-900/30" },
-      { label: "Top Sender", value: "ShopRite", icon: Award, color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-900/30" },
+      { label: "Total Email Revenue", value: formatNaira(totalRevenue), tooltip: "Revenue generated from email credit sales in the selected period.", icon: DollarSign, color: "text-green-500", bg: "bg-green-50 dark:bg-green-900/30" },
+      { label: "Total Emails Sold", value: `${(totalVolume / 1000000).toFixed(1)}M`, tooltip: "Total volume of email credits purchased.", icon: Mail, color: "text-amber-500", bg: "bg-amber-50 dark:bg-amber-900/30" },
+      { label: "Avg Cost / 10k", value: "₦5,000", tooltip: "Average price charged per 10,000 email credits.", icon: TrendingUp, color: "text-purple-500", bg: "bg-purple-50 dark:bg-purple-900/30" },
+      { label: "Top Sender", value: "ShopRite", tooltip: "The client consuming the most email credits.", icon: Award, color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-900/30" },
     ];
 
     return { summaryStats: stats };
-  }, []);
+  }, [chartData]);
 
   return (
     <div className="space-y-8 pb-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Email Revenue Tracker</h1>
-        <p className="text-zinc-500">Monitor high-volume email campaign sales, consumption, and margins.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center">
+            Email Revenue Tracker
+            <InfoTooltip content="Track bulk email sales and consumption by your enterprise clients." />
+          </h1>
+          <p className="text-zinc-500">Monitor high-volume email campaign sales, consumption, and margins.</p>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5">
+            <Calendar className="w-4 h-4 text-zinc-500" />
+            <select 
+              value={timeRange}
+              onChange={(e) => setTimeRange(e.target.value)}
+              className="bg-transparent text-sm text-zinc-700 dark:text-zinc-300 focus:outline-none cursor-pointer"
+            >
+              <option value="7days">Last 7 Days</option>
+              <option value="30days">Last 30 Days</option>
+              <option value="90days">Last 90 Days</option>
+              <option value="year">This Year</option>
+            </select>
+          </div>
+          <button 
+            onClick={() => exportToCSV(chartData, "email_revenue_data")}
+            className="flex items-center gap-2 px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-50 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Download className="w-4 h-4" /> Export
+          </button>
+        </div>
       </div>
 
       {/* SUMMARY CARDS */}
@@ -92,7 +133,10 @@ export default function EmailTrackerPage() {
               <stat.icon className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-sm font-medium text-zinc-500">{stat.label}</p>
+              <p className="text-sm font-medium text-zinc-500 flex items-center">
+                {stat.label}
+                <InfoTooltip content={stat.tooltip} />
+              </p>
               <h3 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{stat.value}</h3>
             </div>
           </div>
@@ -105,6 +149,7 @@ export default function EmailTrackerPage() {
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm p-6 lg:col-span-2">
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 mb-6 flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-amber-500" /> Email Volume & Revenue Trends
+            <InfoTooltip content="Monthly trends for email credit purchases and corresponding revenue." />
           </h2>
           
           <div className="h-80 w-full">
@@ -137,7 +182,17 @@ export default function EmailTrackerPage() {
         {/* RECENT PURCHASES TABLE */}
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden flex flex-col">
           <div className="border-b border-zinc-200 dark:border-zinc-800 p-6 flex justify-between items-center">
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Recent Credit Sales</h2>
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 flex items-center">
+              Recent Credit Sales
+              <InfoTooltip content="Log of recent bulk email credit purchases." />
+            </h2>
+            <button 
+              onClick={() => exportToCSV(recentPurchases, "recent_email_purchases")}
+              className="text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors"
+              title="Export Sales Data"
+            >
+              <Download className="w-4 h-4" />
+            </button>
           </div>
           
           <div className="overflow-y-auto flex-1 max-h-[400px]">

@@ -7,8 +7,12 @@ import {
   Activity,
   LineChart as LineChartIcon,
   CalendarDays,
-  Wallet
+  Wallet,
+  Download,
+  Info
 } from "lucide-react";
+import { InfoTooltip } from "@/components/InfoTooltip";
+import { exportToCSV } from "@/lib/export";
 import {
   LineChart,
   Line,
@@ -32,7 +36,7 @@ const formatNaira = (value: number) => {
 };
 
 export default function ForecastingPage() {
-  const [period, setPeriod] = useState<3 | 6 | 12>(6);
+  const [period, setPeriod] = useState<number>(6);
   const [growthRate, setGrowthRate] = useState(15);
   const [churnRate, setChurnRate] = useState(5);
   const [conversionRate, setConversionRate] = useState(12);
@@ -94,9 +98,20 @@ export default function ForecastingPage() {
 
   return (
     <div className="space-y-8 pb-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Forecasting Engine</h1>
-        <p className="text-zinc-500">Project future revenue, profit, and cash flow based on growth and churn trends.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center">
+            Forecasting Engine
+            <InfoTooltip content="This engine simulates future business performance based on your current inputs." />
+          </h1>
+          <p className="text-zinc-500">Project future revenue, profit, and cash flow based on growth and churn trends.</p>
+        </div>
+        <button 
+          onClick={() => exportToCSV(forecastData, "forecasting_data")}
+          className="flex items-center gap-2 px-4 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-50 rounded-lg text-sm font-medium transition-colors"
+        >
+          <Download className="w-4 h-4" /> Export Data
+        </button>
       </div>
 
       {/* CONTROLS & SUMMARY */}
@@ -112,29 +127,32 @@ export default function ForecastingPage() {
 
           <div className="space-y-5">
             <div>
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300 block mb-2">
-                Forecast Period
-              </label>
-              <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-lg">
-                {[3, 6, 12].map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setPeriod(m as any)}
-                    className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                      period === m 
-                        ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-50 shadow-sm" 
-                        : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-50"
-                    }`}
-                  >
-                    {m} Months
-                  </button>
-                ))}
+              <div className="flex justify-between mb-2">
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300 flex items-center">
+                  Forecast Period
+                  <InfoTooltip content="How many months into the future to project." />
+                </label>
+                <span className="text-sm font-bold text-zinc-900 dark:text-zinc-50">{period} Months</span>
+              </div>
+              <input 
+                type="range" 
+                className="w-full accent-zinc-500" 
+                min="1" max="36" step="1"
+                value={period} 
+                onChange={(e) => setPeriod(Number(e.target.value))} 
+              />
+              <div className="flex justify-between text-[10px] text-zinc-500 mt-1">
+                <span>1 mo</span>
+                <span>36 mo</span>
               </div>
             </div>
 
             <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
               <div className="flex justify-between mb-2">
-                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Growth Rate</label>
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300 flex items-center">
+                  Growth Rate
+                  <InfoTooltip content="Percentage of organic new businesses joining each month." />
+                </label>
                 <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{growthRate}%</span>
               </div>
               <input 
@@ -146,7 +164,10 @@ export default function ForecastingPage() {
 
             <div>
               <div className="flex justify-between mb-2">
-                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Churn Rate</label>
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300 flex items-center">
+                  Churn Rate
+                  <InfoTooltip content="Percentage of active businesses leaving each month." />
+                </label>
                 <span className="text-sm font-bold text-red-600 dark:text-red-400">{churnRate}%</span>
               </div>
               <input 
@@ -158,7 +179,10 @@ export default function ForecastingPage() {
 
             <div>
               <div className="flex justify-between mb-2">
-                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">QRThrive Conversion</label>
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300 flex items-center">
+                  QRThrive Conversion
+                  <InfoTooltip content="Percentage of leads successfully converting to paying users." />
+                </label>
                 <span className="text-sm font-bold text-green-600 dark:text-green-400">{conversionRate}%</span>
               </div>
               <input 
@@ -249,7 +273,8 @@ export default function ForecastingPage() {
           </div>
         </div>
 
-        {/* Profit Forecast */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          {/* Profit Forecast */}
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm p-6">
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 mb-6 flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-green-500" /> Profit Forecast
@@ -293,6 +318,7 @@ export default function ForecastingPage() {
               </LineChart>
             </ResponsiveContainer>
           </div>
+        </div>
         </div>
 
       </div>
