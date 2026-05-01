@@ -12,8 +12,13 @@ import {
   X,
   Mail,
   MessageSquare,
-  Clock
+  Clock,
+  Info,
+  ChevronLeft,
+  Download
 } from "lucide-react";
+import { InfoTooltip } from "@/components/InfoTooltip";
+import { exportToCSV } from "@/lib/export";
 import {
   AreaChart,
   Area,
@@ -89,6 +94,10 @@ export default function BusinessesPage() {
   const [planFilter, setPlanFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
 
+  // --- PAGINATION STATE ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
   // Calculate dynamic metrics & filter
   const { filteredBusinesses, summaryStats } = useMemo(() => {
     let filtered = rawBusinesses;
@@ -116,14 +125,26 @@ export default function BusinessesPage() {
     const churnRate = ((churnedCount / rawBusinesses.length) * 100).toFixed(1);
 
     const stats = [
-      { label: "Active Businesses", value: activeCount, icon: Building2, color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-900/30" },
-      { label: "Total MRR", value: formatNaira(totalMrr), icon: DollarSign, color: "text-green-500", bg: "bg-green-50 dark:bg-green-900/30" },
-      { label: "Overall Churn Rate", value: `${churnRate}%`, icon: UserX, color: "text-red-500", bg: "bg-red-50 dark:bg-red-900/30" },
-      { label: "Best Selling Plan", value: "Gold", icon: Award, color: "text-amber-500", bg: "bg-amber-50 dark:bg-amber-900/30" },
+      { label: "Active Businesses", value: activeCount, tooltip: "Total number of businesses currently subscribed.", icon: Building2, color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-900/30" },
+      { label: "Total MRR", value: formatNaira(totalMrr), tooltip: "Monthly Recurring Revenue from all active subscriptions.", icon: DollarSign, color: "text-green-500", bg: "bg-green-50 dark:bg-green-900/30" },
+      { label: "Overall Churn Rate", value: `${churnRate}%`, tooltip: "Percentage of businesses that have cancelled.", icon: UserX, color: "text-red-500", bg: "bg-red-50 dark:bg-red-900/30" },
+      { label: "Best Selling Plan", value: "Gold", tooltip: "The plan that generates the most revenue.", icon: Award, color: "text-amber-500", bg: "bg-amber-50 dark:bg-amber-900/30" },
     ];
 
     return { filteredBusinesses: filtered, summaryStats: stats };
   }, [searchQuery, planFilter, statusFilter]);
+
+  // Reset pagination when filters change
+  useMemo(() => {
+    setCurrentPage(1);
+  }, [searchQuery, planFilter, statusFilter]);
+
+  // Paginate data
+  const totalPages = Math.ceil(filteredBusinesses.length / itemsPerPage);
+  const paginatedBusinesses = filteredBusinesses.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   // Close panel on escape key
   if (typeof window !== "undefined") {
@@ -134,9 +155,20 @@ export default function BusinessesPage() {
 
   return (
     <div className="space-y-8 pb-8 relative">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">Subscription & Business Tracker</h1>
-        <p className="text-zinc-500">Monitor active subscriptions, analyze churn, and manage individual business health.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center">
+            Subscription & Business Tracker
+            <InfoTooltip content="Track all your individual subscriptions and enterprise business clients here." />
+          </h1>
+          <p className="text-zinc-500">Monitor active subscriptions, analyze churn, and manage individual business health.</p>
+        </div>
+        <button 
+          onClick={() => exportToCSV(filteredBusinesses, "businesses_data")}
+          className="flex items-center gap-2 px-4 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-zinc-50 rounded-lg text-sm font-medium transition-colors"
+        >
+          <Download className="w-4 h-4" /> Export Data
+        </button>
       </div>
 
       {/* SUMMARY CARDS */}
@@ -147,7 +179,10 @@ export default function BusinessesPage() {
               <stat.icon className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-sm font-medium text-zinc-500">{stat.label}</p>
+              <p className="text-sm font-medium text-zinc-500 flex items-center">
+                {stat.label}
+                <InfoTooltip content={stat.tooltip} />
+              </p>
               <h3 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{stat.value}</h3>
             </div>
           </div>
@@ -170,9 +205,9 @@ export default function BusinessesPage() {
             />
           </div>
           
-          <div className="flex items-center gap-3 w-full xl:w-auto">
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto">
             <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 w-full sm:w-auto">
-              <Filter className="w-4 h-4 text-zinc-500" />
+              <Filter className="w-4 h-4 text-zinc-500 shrink-0" />
               <select 
                 value={planFilter}
                 onChange={(e) => setPlanFilter(e.target.value)}
@@ -216,7 +251,7 @@ export default function BusinessesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-              {filteredBusinesses.map((business) => (
+              {paginatedBusinesses.map((business) => (
                 <tr 
                   key={business.id} 
                   onClick={() => setSelectedBusiness(business)}
@@ -269,6 +304,31 @@ export default function BusinessesPage() {
             </tbody>
           </table>
         </div>
+        
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+            <span className="text-sm text-zinc-500">
+              Page {currentPage} of {totalPages}
+            </span>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 disabled:opacity-50 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 disabled:opacity-50 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* DRILL-DOWN SIDE PANEL OVERLAY */}
