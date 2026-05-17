@@ -1,0 +1,16 @@
+{
+  "name": "@vemtap-fos/eslint-config",
+  "version": "0.0.1",
+  "private": true,
+  "license": "UNLICENSED",
+  "main": "base.js",
+  "files": [
+    "base.js"
+  ],
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  },
+  "peerDependencies": {
+    "eslint": "^9.18.0"
+  }
+}
