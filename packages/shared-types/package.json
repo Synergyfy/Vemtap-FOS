@@ -3,8 +3,8 @@
   "version": "0.0.1",
   "private": true,
   "license": "UNLICENSED",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist .turbo"
@@ -12,5 +12,8 @@
   "devDependencies": {
     "@vemtap-fos/tsconfig": "workspace:*",
     "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
   }
 }

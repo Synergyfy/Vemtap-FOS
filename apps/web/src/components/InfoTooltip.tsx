@@ -20,12 +20,12 @@ export function InfoTooltip({ content, className }: InfoTooltipProps) {
         onMouseLeave={() => setIsVisible(false)}
         className={cn(
           "text-zinc-400 hover:text-blue-500 transition-colors focus:outline-none",
-          className
+          className,
         )}
       >
         <Info className="w-3.5 h-3.5" />
       </button>
-      
+
       {isVisible && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-zinc-900 dark:bg-zinc-800 text-white text-[11px] leading-relaxed rounded-lg shadow-xl z-50 animate-in fade-in zoom-in duration-200">
           {content}

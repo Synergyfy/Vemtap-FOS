@@ -9,11 +9,11 @@ This `.agent/` directory contains the granular rules for the Vemtap-FOS monorepo
 
 ## Quick reference
 
-| Topic | File |
-|---|---|
-| Architecture overview | `rules/architecture.md` |
-| TypeScript conventions | `rules/typescript.md` |
-| Prisma + N+1 prevention | `rules/prisma.md` |
-| NestJS API patterns | `rules/api.md` |
-| Next.js Web patterns | `rules/web.md` |
-| Package naming & workspace | `rules/workspace.md` |
+| Topic                      | File                    |
+| -------------------------- | ----------------------- |
+| Architecture overview      | `rules/architecture.md` |
+| TypeScript conventions     | `rules/typescript.md`   |
+| Prisma + N+1 prevention    | `rules/prisma.md`       |
+| NestJS API patterns        | `rules/api.md`          |
+| Next.js Web patterns       | `rules/web.md`          |
+| Package naming & workspace | `rules/workspace.md`    |

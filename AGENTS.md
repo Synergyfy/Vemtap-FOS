@@ -36,6 +36,7 @@
 - Never duplicate a type across apps — put it here
 
 Example structure:
+
 ```
 packages/shared-types/src/
   entities/
@@ -96,6 +97,7 @@ packages/shared-types/src/
 - Document complex fields with `///` comments
 
 Example fragment:
+
 ```prisma
 model User {
   id        String   @id @default(cuid())
@@ -124,8 +126,8 @@ enum Role {
 
 ```typescript
 // prisma/prisma.service.ts
-import { Injectable, OnModuleInit } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { Injectable, OnModuleInit } from "@nestjs/common";
+import { PrismaClient } from "@prisma/client";
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
@@ -145,6 +147,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 - Use Prisma's `findMany` with nested `include` rather than iterative queries
 
 ### Bad (N+1):
+
 ```typescript
 const users = await prisma.user.findMany();
 for (const user of users) {
@@ -153,6 +156,7 @@ for (const user of users) {
 ```
 
 ### Good (single query):
+
 ```typescript
 const users = await prisma.user.findMany({
   include: { posts: true },
@@ -181,12 +185,12 @@ constructor() {
 
 ```typescript
 // packages/shared-types/src/dtos/create-user.dto.ts
-import { z } from 'zod';
+import { z } from "zod";
 
 export const CreateUserSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(100).optional(),
-  role: z.enum(['USER', 'ADMIN']).default('USER'),
+  role: z.enum(["USER", "ADMIN"]).default("USER"),
 });
 
 export type CreateUserDto = z.infer<typeof CreateUserSchema>;
@@ -254,13 +258,13 @@ export interface ApiResponse<T> {
 
 For focused deep-dives on individual topics, see `.agent/rules/`:
 
-| File | Topic |
-|---|---|
-| `.agent/rules/architecture.md` | Architecture overview |
-| `.agent/rules/typescript.md` | TypeScript + shared types |
-| `.agent/rules/prisma.md` | Prisma schema + N+1 prevention |
-| `.agent/rules/api.md` | NestJS API conventions |
-| `.agent/rules/web.md` | Next.js Web conventions |
-| `.agent/rules/workspace.md` | Package naming + workspace |
+| File                           | Topic                          |
+| ------------------------------ | ------------------------------ |
+| `.agent/rules/architecture.md` | Architecture overview          |
+| `.agent/rules/typescript.md`   | TypeScript + shared types      |
+| `.agent/rules/prisma.md`       | Prisma schema + N+1 prevention |
+| `.agent/rules/api.md`          | NestJS API conventions         |
+| `.agent/rules/web.md`          | Next.js Web conventions        |
+| `.agent/rules/workspace.md`    | Package naming + workspace     |
 
 <!-- END:vemtap-fos-monorepo-rules -->

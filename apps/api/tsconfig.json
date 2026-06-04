@@ -1,7 +1,0 @@
-{
-  "extends": "@vemtap-fos/tsconfig/nestjs.json",
-  "compilerOptions": {
-    "baseUrl": "./",
-    "outDir": "./dist"
-  }
-}

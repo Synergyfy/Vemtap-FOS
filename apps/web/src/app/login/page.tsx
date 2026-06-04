@@ -1,18 +1,52 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { ArrowRight, Lock, Eye, EyeOff } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { isAxiosError } from "axios";
+import { ArrowRight, Lock, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
+import { useLogin } from "@/lib/hooks/use-auth";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("admin@vemtap.com");
+  const [password, setPassword] = useState("password123");
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const login = useLogin();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    login.mutate(
+      { identifier: email, password },
+      {
+        onSuccess: (body) => {
+          localStorage.setItem("fos_access_token", body.access_token);
+          localStorage.setItem("fos_user", JSON.stringify(body.user));
+          router.push("/dashboard");
+          router.refresh();
+        },
+        onError: (err: unknown) => {
+          const message = isAxiosError(err)
+            ? (err.response?.data as { message?: string })?.message ||
+              err.message
+            : "Unable to connect to the login service. Please check if the backend API is running.";
+          setError(message);
+        },
+      },
+    );
+  };
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
           <div className="w-12 h-12 bg-zinc-900 dark:bg-zinc-50 rounded-xl flex items-center justify-center shadow-lg">
-            <span className="text-zinc-50 dark:text-zinc-900 text-xl font-bold">V</span>
+            <span className="text-zinc-50 dark:text-zinc-900 text-xl font-bold">
+              V
+            </span>
           </div>
         </div>
         <h2 className="mt-6 text-center text-3xl font-extrabold text-zinc-900 dark:text-zinc-50">
@@ -25,9 +59,19 @@ export default function LoginPage() {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white dark:bg-zinc-900 py-8 px-4 shadow-xl border border-zinc-200 dark:border-zinc-800 sm:rounded-2xl sm:px-10">
-          <form className="space-y-6" action="/dashboard">
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            {error && (
+              <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900/50 rounded-lg text-sm font-medium flex items-start gap-2 animate-in fade-in duration-200">
+                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
                 Email address
               </label>
               <div className="mt-1">
@@ -37,14 +81,19 @@ export default function LoginPage() {
                   type="email"
                   autoComplete="email"
                   required
-                  defaultValue="admin@vemtap.com"
-                  className="appearance-none block w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-lg shadow-sm placeholder-zinc-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={login.isPending}
+                  className="appearance-none block w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-lg shadow-sm placeholder-zinc-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 disabled:opacity-50"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
                 Password
               </label>
               <div className="mt-1 relative">
@@ -54,8 +103,10 @@ export default function LoginPage() {
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   required
-                  defaultValue="password123"
-                  className="appearance-none block w-full px-3 py-2 pr-10 border border-zinc-300 dark:border-zinc-700 rounded-lg shadow-sm placeholder-zinc-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={login.isPending}
+                  className="appearance-none block w-full px-3 py-2 pr-10 border border-zinc-300 dark:border-zinc-700 rounded-lg shadow-sm placeholder-zinc-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 disabled:opacity-50"
                 />
                 <button
                   type="button"
@@ -78,24 +129,43 @@ export default function LoginPage() {
                   id="remember-me"
                   name="remember-me"
                   type="checkbox"
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-zinc-300 rounded cursor-pointer"
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-zinc-300 rounded cursor-pointer animate-none"
                 />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-zinc-900 dark:text-zinc-300 cursor-pointer">
+                <label
+                  htmlFor="remember-me"
+                  className="ml-2 block text-sm text-zinc-900 dark:text-zinc-300 cursor-pointer"
+                >
                   Remember me
                 </label>
               </div>
 
               <div className="text-sm">
-                <a href="#" className="font-medium text-blue-600 hover:text-blue-500">
+                <a
+                  href="#"
+                  className="font-medium text-blue-600 hover:text-blue-500"
+                >
                   Forgot your password?
                 </a>
               </div>
             </div>
 
             <div>
-              <Link href="/dashboard" className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
-                Sign in <ArrowRight className="ml-2 w-4 h-4 mt-0.5" />
-              </Link>
+              <button
+                type="submit"
+                disabled={login.isPending}
+                className="w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {login.isPending ? (
+                  <>
+                    <Loader2 className="animate-spin -ml-1 mr-2 h-4 w-4" />
+                    Signing in...
+                  </>
+                ) : (
+                  <>
+                    Sign in <ArrowRight className="ml-2 w-4 h-4" />
+                  </>
+                )}
+              </button>
             </div>
           </form>
 
