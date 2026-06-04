@@ -3,6 +3,6 @@ import type { FunnelSnapshot } from "@/lib/types";
 
 export const funnelApi = {
   getStats: async () => {
-    return api.get("/funnel/stats") as Promise<FunnelSnapshot[]>;
+    return api.get("/funnel/stats") as unknown as Promise<FunnelSnapshot[]>;
   },
 };

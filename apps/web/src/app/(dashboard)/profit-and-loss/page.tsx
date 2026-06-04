@@ -22,7 +22,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { usePnlStatement, useRevenueTrends } from "@/lib/hooks/use-pnl";
+import { usePnlStatement, usePnlRevenueTrends } from "@/lib/hooks/use-pnl";
 
 const formatNaira = (value: number) => {
   if (value >= 1000000) return `₦${(value / 1000000).toFixed(2)}M`;
@@ -32,7 +32,7 @@ const formatNaira = (value: number) => {
 
 export default function ProfitAndLossPage() {
   const { data: statement, isLoading } = usePnlStatement();
-  const { data: trends } = useRevenueTrends();
+  const { data: trends } = usePnlRevenueTrends();
 
   const chartData = useMemo(() => {
     if (!trends) return [];

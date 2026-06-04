@@ -1,4 +1,4 @@
-import type { Plan, BusinessStatus } from "@vemtap-fos/shared-types";
+import type { Plan, BusinessStatus } from "@/shared";
 
 export interface Business {
   id: string;

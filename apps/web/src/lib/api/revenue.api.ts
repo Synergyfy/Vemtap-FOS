@@ -18,15 +18,15 @@ export const revenueApi = {
     startDate?: string;
     endDate?: string;
   }) => {
-    return api.get("/revenue/transactions", { params }) as Promise<TransactionsResponse>;
+    return api.get("/revenue/transactions", { params }) as unknown as Promise<TransactionsResponse>;
   },
 
   getAggregates: async () => {
-    return api.get("/revenue/aggregates") as Promise<RevenueAggregates>;
+    return api.get("/revenue/aggregates") as unknown as Promise<RevenueAggregates>;
   },
 
   getTrends: async () => {
-    return api.get("/revenue/trends") as Promise<RevenueTrend[]>;
+    return api.get("/revenue/trends") as unknown as Promise<RevenueTrend[]>;
   },
 
   getChartData: async (params?: {
@@ -35,10 +35,10 @@ export const revenueApi = {
     platform?: string;
     type?: string;
   }) => {
-    return api.get("/revenue/chart-data", { params }) as Promise<RevenueChartDataResponse>;
+    return api.get("/revenue/chart-data", { params }) as unknown as Promise<RevenueChartDataResponse>;
   },
 
   getBusinessRevenueHistory: async (businessId: string) => {
-    return api.get(`/revenue/business/${businessId}/history`) as Promise<BusinessRevenueHistoryResponse>;
+    return api.get(`/revenue/business/${businessId}/history`) as unknown as Promise<BusinessRevenueHistoryResponse>;
   },
 };

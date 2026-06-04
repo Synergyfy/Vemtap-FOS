@@ -2,15 +2,14 @@
   "name": "vemtap-fos",
   "private": true,
   "scripts": {
-    "dev": "turbo dev",
-    "build": "turbo build",
-    "lint": "turbo lint",
-    "test": "turbo test",
-    "clean": "turbo clean",
+    "dev": "pnpm -C apps/web dev",
+    "build": "pnpm -C apps/web build",
+    "lint": "pnpm -C apps/web lint",
+    "start": "pnpm -C apps/web start",
+    "clean": "pnpm -C apps/web clean",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
   },
   "devDependencies": {
-    "turbo": "^2.5.0",
     "prettier": "^3.4.2"
   },
   "pnpm": {

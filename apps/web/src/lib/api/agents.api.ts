@@ -13,15 +13,15 @@ export const agentsApi = {
     search?: string;
     status?: string;
   }) => {
-    return api.get("/affiliates/agents", { params }) as Promise<ListAgentsResponse>;
+    return api.get("/affiliates/agents", { params }) as unknown as Promise<ListAgentsResponse>;
   },
 
   getOne: async (id: string) => {
-    return api.get(`/affiliates/agents/${id}`) as Promise<AgentDetailResponse>;
+    return api.get(`/affiliates/agents/${id}`) as unknown as Promise<AgentDetailResponse>;
   },
 
   getRevenue: async (id: string) => {
-    return api.get(`/affiliates/agents/${id}/revenue`) as Promise<RevenueTrendResponse>;
+    return api.get(`/affiliates/agents/${id}/revenue`) as unknown as Promise<RevenueTrendResponse>;
   },
 
   create: async (data: {
@@ -32,7 +32,7 @@ export const agentsApi = {
     status?: string;
     managerId?: string;
   }) => {
-    return api.post("/affiliates/agents", data) as Promise<AgentDetailResponse>;
+    return api.post("/affiliates/agents", data) as unknown as Promise<AgentDetailResponse>;
   },
 
   update: async (
@@ -45,7 +45,7 @@ export const agentsApi = {
       managerId: string;
     }>,
   ) => {
-    return api.patch(`/affiliates/agents/${id}`, data) as Promise<AgentDetailResponse>;
+    return api.patch(`/affiliates/agents/${id}`, data) as unknown as Promise<AgentDetailResponse>;
   },
 
   remove: async (id: string) => {

@@ -3,7 +3,7 @@ import type { Budget, Forecast } from "@/lib/types";
 
 export const budgetsApi = {
   getAll: async () => {
-    return api.get("/budgets") as Promise<Budget[]>;
+    return api.get("/budgets") as unknown as Promise<Budget[]>;
   },
 
   create: async (data: {
@@ -15,10 +15,10 @@ export const budgetsApi = {
     startDate: string;
     endDate: string;
   }) => {
-    return api.post("/budgets", data) as Promise<Budget>;
+    return api.post("/budgets", data) as unknown as Promise<Budget>;
   },
 
   getForecasts: async (params?: { scenario?: string }) => {
-    return api.get("/budgets/forecasts", { params }) as Promise<Forecast[]>;
+    return api.get("/budgets/forecasts", { params }) as unknown as Promise<Forecast[]>;
   },
 };

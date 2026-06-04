@@ -69,10 +69,10 @@ export default function DashboardLayout({
     () => null,
   );
 
-  const displayName = userProfile?.name || (userProfile?.firstName && userProfile?.lastName
+  const displayName = String(userProfile?.name ?? (userProfile?.firstName && userProfile?.lastName
     ? `${userProfile.firstName} ${userProfile.lastName}`
-    : userProfile?.firstName || "—");
-  const displayEmail = userProfile?.email || "—";
+    : userProfile?.firstName) ?? "—");
+  const displayEmail = String(userProfile?.email ?? "—");
 
   const handleLogout = (e: React.MouseEvent) => {
     e.preventDefault();

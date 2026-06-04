@@ -87,7 +87,7 @@ export const CreateForecastSchema = z.object({
   growthRate: z.number(),
   churnRate: z.number(),
   conversionRate: z.number(),
-  period: z.string(), // YYYY-MM
+  period: z.string(),
   scenario: z.nativeEnum(ScenarioType),
 });
 export type CreateForecastDto = z.infer<typeof CreateForecastSchema>;

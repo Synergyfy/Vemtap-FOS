@@ -51,10 +51,12 @@ export function useBreakEven() {
   });
 }
 
-export function useRevenueTrends() {
+export function usePnlRevenueTrends() {
   return useQuery({
     queryKey: pnlKeys.revenueTrends(),
     queryFn: pnlApi.getRevenueTrends,
     staleTime: 30_000,
   });
 }
+
+

@@ -11,15 +11,15 @@ export const businessesApi = {
     search?: string;
     isVerified?: boolean;
   }) => {
-    return api.get("/businesses/admin", { params }) as Promise<AdminBusinessesResponse>;
+    return api.get("/businesses/admin", { params }) as unknown as Promise<AdminBusinessesResponse>;
   },
 
   getStats: async () => {
-    return api.get("/businesses/stats") as Promise<BusinessStatsResponse>;
+    return api.get("/businesses/stats") as unknown as Promise<BusinessStatsResponse>;
   },
 
   getOne: async (id: string) => {
-    return api.get(`/businesses/${id}`) as Promise<BusinessDetail>;
+    return api.get(`/businesses/${id}`) as unknown as Promise<BusinessDetail>;
   },
 
   create: async (data: {
@@ -30,7 +30,7 @@ export const businessesApi = {
     status?: string;
     agentId?: string | null;
   }) => {
-    return api.post("/businesses", data) as Promise<Business>;
+    return api.post("/businesses", data) as unknown as Promise<Business>;
   },
 
   update: async (id: string, data: Partial<{
@@ -41,7 +41,7 @@ export const businessesApi = {
     status: string;
     agentId: string | null;
   }>) => {
-    return api.patch(`/businesses/${id}`, data) as Promise<Business>;
+    return api.patch(`/businesses/${id}`, data) as unknown as Promise<Business>;
   },
 
   remove: async (id: string) => {

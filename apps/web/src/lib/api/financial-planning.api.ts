@@ -11,20 +11,20 @@ export const financialPlanningApi = {
     return FOS_API.post<FinancialTarget>(
       "/financial-planning/targets",
       data,
-    ) as Promise<FinancialTarget>;
+    ) as unknown as Promise<FinancialTarget>;
   },
 
   getTargets: async (periodType?: string) => {
     return FOS_API.get<FinancialTarget[]>(
       "/financial-planning/targets",
       { params: periodType ? { periodType } : undefined },
-    ) as Promise<FinancialTarget[]>;
+    ) as unknown as Promise<FinancialTarget[]>;
   },
 
   simulateScenarios: async (data: ScenarioSimulationInput) => {
     return FOS_API.post<ScenarioSimulation>(
       "/financial-planning/scenarios",
       data,
-    ) as Promise<ScenarioSimulation>;
+    ) as unknown as Promise<ScenarioSimulation>;
   },
 };

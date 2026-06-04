@@ -6,6 +6,6 @@ export const forecastingApi = {
     return FOS_API.post<ForecastProjection>(
       "/forecasting/project",
       data,
-    ) as Promise<ForecastProjection>;
+    ) as unknown as Promise<ForecastProjection>;
   },
 };

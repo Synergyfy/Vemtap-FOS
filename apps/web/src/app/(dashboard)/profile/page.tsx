@@ -30,10 +30,11 @@ export default function ProfilePage() {
     () => null,
   );
 
-  const displayName =
+  const displayName = String(
     profile?.firstName && profile?.lastName
       ? `${profile.firstName} ${profile.lastName}`
-      : profile?.firstName || "—";
+      : profile?.firstName ?? "—"
+  );
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-8">
@@ -57,10 +58,10 @@ export default function ProfilePage() {
               {displayName}
             </h2>
             <p className="text-sm text-zinc-500 mb-4">
-              {profile?.email || "—"}
+              {String(profile?.email ?? "—")}
             </p>
             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">
-              {profile?.role || "—"}
+              {String(profile?.role ?? "—")}
             </span>
           </div>
 
@@ -76,7 +77,7 @@ export default function ProfilePage() {
                     Email Address
                   </p>
                   <p className="text-sm text-zinc-900 dark:text-zinc-50">
-                    {profile?.email || "—"}
+              {String(profile?.email ?? "—")}
                   </p>
                 </div>
               </div>
@@ -87,7 +88,7 @@ export default function ProfilePage() {
                     Role
                   </p>
                   <p className="text-sm text-zinc-900 dark:text-zinc-50">
-                    {profile?.role || "—"}
+              {String(profile?.role ?? "—")}
                   </p>
                 </div>
               </div>
@@ -117,7 +118,7 @@ export default function ProfilePage() {
                     </span>
                   </div>
                   <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                    Authenticated as {profile?.email || "—"}.
+                    Authenticated as {String(profile?.email ?? "—")}.
                   </p>
                 </div>
               </div>

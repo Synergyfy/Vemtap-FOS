@@ -82,10 +82,10 @@ export default function ForecastingPage() {
     );
   };
 
-  const TooltipFormatter = (value: number, name: string) => {
+  const TooltipFormatter = (value: any, name: any) => {
     if (name === "Businesses")
-      return [value.toLocaleString(), "Active Businesses"];
-    return [formatNaira(value), name.charAt(0).toUpperCase() + name.slice(1)];
+      return [Number(value).toLocaleString(), "Active Businesses"];
+    return [formatNaira(Number(value)), name.charAt(0).toUpperCase() + name.slice(1)];
   };
 
   const forecastData = result?.monthlyData ?? [];

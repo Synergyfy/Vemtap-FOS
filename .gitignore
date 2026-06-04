@@ -13,8 +13,6 @@ obj/
 *.tsbuildinfo
 next-env.d.ts
 
-# Turbo
-.turbo/
 
 # Testing
 coverage/
@@ -55,6 +53,10 @@ Thumbs.db
 *.swo
 *.sublime-project
 *.sublime-workspace
+
+# PWA generated files
+apps/web/public/sw.js
+apps/web/public/workbox-*.js
 
 # Vercel
 .vercel
