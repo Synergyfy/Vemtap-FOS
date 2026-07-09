@@ -22,13 +22,15 @@ import {
   LogOut,
   ChevronDown,
   Menu,
-  X
+  X,
+  Coins
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const sidebarItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
   { icon: Target, label: "Financial Planning", href: "/financial-planning" },
+  { icon: Coins, label: "Commission Planning", href: "/commission-planning" },
   { icon: LineChart, label: "Forecasting", href: "/forecasting" },
   { icon: BarChart3, label: "Revenue Analytics", href: "/revenue-analytics" },
   { icon: Users, label: "Agents", href: "/agents" },
