@@ -1,7 +1,5 @@
 import api from "./axios";
 import type {
-  SmsLog,
-  EmailLog,
   MessagingAggregates,
   SmsLogsResponse,
   EmailLogsResponse,

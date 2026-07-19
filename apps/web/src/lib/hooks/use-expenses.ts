@@ -22,3 +22,20 @@ export function useCreateExpense() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: expenseKeys.all }),
   });
 }
+
+export function useUpdateExpense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Parameters<typeof expensesApi.update>[1] }) =>
+      expensesApi.update(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: expenseKeys.all }),
+  });
+}
+
+export function useDeleteExpense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: expensesApi.remove,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: expenseKeys.all }),
+  });
+}

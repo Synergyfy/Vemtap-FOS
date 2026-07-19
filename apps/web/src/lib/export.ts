@@ -1,4 +1,4 @@
-export function exportToCSV(data: any[], filename: string) {
+export function exportToCSV(data: Record<string, unknown>[], filename: string) {
   if (!data || !data.length) {
     alert("No data available to export.");
     return;
@@ -16,7 +16,7 @@ export function exportToCSV(data: any[], filename: string) {
   // Add data rows
   for (const row of data) {
     const values = headers.map((header) => {
-      const val = row[header];
+      const val = (row as Record<string, unknown>)[header];
       // Escape commas and quotes
       const escaped = ("" + val).replace(/"/g, '""');
       return `"${escaped}"`;

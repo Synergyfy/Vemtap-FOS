@@ -1,7 +1,6 @@
 import api from "./axios";
 import type {
   AgentDetailResponse,
-  AgentListItem,
   ListAgentsResponse,
   RevenueTrendResponse,
 } from "@/lib/types";

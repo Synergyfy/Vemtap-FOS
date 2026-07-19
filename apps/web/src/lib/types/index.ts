@@ -12,3 +12,8 @@ export * from "./settings";
 export * from "./financial-planning";
 export * from "./forecasting";
 export * from "./auth";
+export * from "./goals";
+export * from "./receivables";
+export * from "./payables";
+export * from "./reports";
+export * from "./ai-assistant";

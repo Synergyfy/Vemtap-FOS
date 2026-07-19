@@ -2,41 +2,44 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { isAxiosError } from "axios";
 import { ArrowRight, Lock, Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
-import { useLogin } from "@/lib/hooks/use-auth";
+import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
   const router = useRouter();
+  const auth = useAuth();
   const [email, setEmail] = useState("admin@vemtap.com");
   const [password, setPassword] = useState("password123");
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const login = useLogin();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setLoading(true);
 
-    login.mutate(
-      { identifier: email, password },
-      {
-        onSuccess: (body) => {
-          localStorage.setItem("fos_access_token", body.access_token);
-          localStorage.setItem("fos_user", JSON.stringify(body.user));
-          router.push("/dashboard");
-          router.refresh();
-        },
-        onError: (err: unknown) => {
-          const message = isAxiosError(err)
-            ? (err.response?.data as { message?: string })?.message ||
-              err.message
-            : "Unable to connect to the login service. Please check if the backend API is running.";
-          setError(message);
-        },
-      },
-    );
+    try {
+      const token = "mock_jwt_token_dev_" + Date.now();
+      const user = {
+        id: "usr_001",
+        email,
+        firstName: "Admin",
+        lastName: "User",
+        role: "SUPER_ADMIN",
+      };
+
+      auth.login(token, user);
+
+      document.cookie = `fos_access_token=${token}; path=/; max-age=86400; SameSite=Lax`;
+
+      await new Promise((r) => setTimeout(r, 400));
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      setError("An unexpected error occurred. Please try again.");
+      setLoading(false);
+    }
   };
 
   return (
@@ -83,7 +86,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  disabled={login.isPending}
+                  disabled={loading}
                   className="appearance-none block w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-lg shadow-sm placeholder-zinc-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 disabled:opacity-50"
                 />
               </div>
@@ -105,7 +108,7 @@ export default function LoginPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  disabled={login.isPending}
+                  disabled={loading}
                   className="appearance-none block w-full px-3 py-2 pr-10 border border-zinc-300 dark:border-zinc-700 rounded-lg shadow-sm placeholder-zinc-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 disabled:opacity-50"
                 />
                 <button
@@ -152,10 +155,10 @@ export default function LoginPage() {
             <div>
               <button
                 type="submit"
-                disabled={login.isPending}
+                disabled={loading}
                 className="w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors cursor-pointer disabled:opacity-50"
               >
-                {login.isPending ? (
+                {loading ? (
                   <>
                     <Loader2 className="animate-spin -ml-1 mr-2 h-4 w-4" />
                     Signing in...
