@@ -1,19 +1,19 @@
 "use client";
 
+import type React from "react";
 import {
   Bell,
   CheckCircle2,
   AlertTriangle,
   Info,
   DollarSign,
-  UserPlus,
   ShieldAlert,
   Check,
   Loader2,
 } from "lucide-react";
 import { useNotifications, useMarkAsRead, useMarkAllAsRead } from "@/lib/hooks/use-notifications";
 
-const typeIcons: Record<string, { icon: any; color: string; bg: string }> = {
+const typeIcons: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string; bg: string }> = {
   ALERT: { icon: AlertTriangle, color: "text-red-500", bg: "bg-red-50 dark:bg-red-900/20" },
   SUCCESS: { icon: CheckCircle2, color: "text-green-500", bg: "bg-green-50 dark:bg-green-900/20" },
   FINANCE: { icon: DollarSign, color: "text-blue-500", bg: "bg-blue-50 dark:bg-blue-900/20" },

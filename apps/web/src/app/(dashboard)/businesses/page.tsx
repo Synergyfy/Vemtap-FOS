@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useBusinesses, useBusinessStats } from "@/lib/hooks/use-businesses";
 import { useBusinessRevenueHistory } from "@/lib/hooks/use-revenue";
 import {
@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { InfoTooltip } from "@/components/InfoTooltip";
 import { exportToCSV } from "@/lib/export";
+import { Business } from "@/lib/types";
 import {
   AreaChart,
   Area,
@@ -46,8 +47,22 @@ const toTitleCase = (str: string) => {
 
 
 
+interface MappedBusiness {
+  id: string;
+  name: string;
+  owner: string;
+  plan: string;
+  mrr: number;
+  status: string;
+  renewalDate: string;
+  agentId: string;
+  agentName: string;
+  smsUsed: number;
+  emailUsed: number;
+}
+
 export default function BusinessesPage() {
-  const [selectedBusiness, setSelectedBusiness] = useState<any>(null);
+  const [selectedBusiness, setSelectedBusiness] = useState<MappedBusiness | null>(null);
 
   // --- FILTERS ---
   const [searchQuery, setSearchQuery] = useState("");
@@ -69,18 +84,18 @@ export default function BusinessesPage() {
   const rawBusinesses = useMemo(() => {
     if (!backendData) return [];
     const list = backendData.data ?? [];
-    return list.map((b: any) => ({
+    return list.map((b: Business) => ({
       id: b.id,
       name: b.name,
-      owner: b.owner ? `${b.owner.firstName ?? ""} ${b.owner.lastName ?? ""}`.trim() || b.owner.email || "—" : "—",
-      plan: b.plan ?? b.category?.name ?? "—",
-      mrr: Number(b.mrr) || 0,
+      owner: b.owner || "—",
+      plan: String(b.plan),
+      mrr: b.mrr,
       status: toTitleCase(b.status),
-      renewalDate: b.verifiedAt ?? b.createdAt ?? new Date().toISOString(),
+      renewalDate: b.renewalDate ?? b.joinDate ?? new Date().toISOString(),
       agentId: b.agentId ?? "—",
       agentName: b.agentName ?? "—",
-      smsUsed: Number(b.smsUsed) || 0,
-      emailUsed: Number(b.emailUsed) || 0,
+      smsUsed: b.smsUsed,
+      emailUsed: b.emailUsed,
     }));
   }, [backendData]);
 
@@ -91,7 +106,7 @@ export default function BusinessesPage() {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(
-        (b: any) =>
+        (b: MappedBusiness) =>
           b.name.toLowerCase().includes(q) ||
           b.owner.toLowerCase().includes(q) ||
           b.id.toLowerCase().includes(q),
@@ -99,11 +114,11 @@ export default function BusinessesPage() {
     }
 
     if (planFilter !== "All") {
-      filtered = filtered.filter((b: any) => b.plan === planFilter);
+      filtered = filtered.filter((b: MappedBusiness) => b.plan === planFilter);
     }
 
     if (statusFilter !== "All") {
-      filtered = filtered.filter((b: any) => b.status === statusFilter);
+      filtered = filtered.filter((b: MappedBusiness) => b.status === statusFilter);
     }
 
     return filtered;
@@ -165,8 +180,8 @@ export default function BusinessesPage() {
   }, [adminStats, bizStats]);
 
   // Reset pagination when filters change
-  useMemo(() => {
-    setCurrentPage(1);
+  useEffect(() => {
+    queueMicrotask(() => setCurrentPage(1));
   }, [searchQuery, planFilter, statusFilter]);
 
   // Paginate data
@@ -177,11 +192,13 @@ export default function BusinessesPage() {
   );
 
   // Close panel on escape key
-  if (typeof window !== "undefined") {
-    window.onkeydown = (e) => {
+  useEffect(() => {
+    const handler = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") setSelectedBusiness(null);
     };
-  }
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   if (isLoading) {
     return (
@@ -306,7 +323,7 @@ export default function BusinessesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-              {paginatedBusinesses.map((business: any) => (
+              {paginatedBusinesses.map((business: MappedBusiness) => (
                 <tr
                   key={business.id}
                   onClick={() => setSelectedBusiness(business)}
@@ -561,7 +578,7 @@ export default function BusinessesPage() {
                           axisLine={false}
                         />
                         <RechartsTooltip
-                          formatter={(value: any) => [
+                          formatter={(value: unknown) => [
                             formatNaira(Number(value)),
                             "Revenue Generated",
                           ]}

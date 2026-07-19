@@ -23,11 +23,7 @@ import {
 } from "recharts";
 import { useFunnelStats } from "@/lib/hooks/use-funnel";
 
-const formatNaira = (value: number) => {
-  if (value >= 1000000) return `₦${(value / 1000000).toFixed(1)}M`;
-  if (value >= 1000) return `₦${(value / 1000).toFixed(1)}k`;
-  return `₦${value.toLocaleString()}`;
-};
+
 
 const COLORS = ["#94a3b8", "#8b5cf6", "#3b82f6"];
 
@@ -142,7 +138,7 @@ export default function QRThriveFunnelPage() {
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#3f3f46" opacity={0.2} />
                 <XAxis type="number" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis dataKey="name" type="category" stroke="#71717a" fontSize={12} tickLine={false} axisLine={false} width={140} />
-                <RechartsTooltip formatter={(value: any) => [Number(value).toLocaleString(), "Users"]}
+                <RechartsTooltip formatter={(value: unknown) => [Number(value).toLocaleString(), "Users"]}
                   contentStyle={{ backgroundColor: "#18181b", borderColor: "#27272a", borderRadius: "8px", color: "#f4f4f5", fontSize: "12px" }} />
                 <Bar dataKey="users" radius={[0, 4, 4, 0]} barSize={40}>
                   {funnelData.map((_, index) => (<Cell key={`cell-${index}`} fill={COLORS[index]} />))}

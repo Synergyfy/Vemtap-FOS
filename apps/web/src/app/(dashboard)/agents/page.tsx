@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAgents, useAgentRevenue } from "@/lib/hooks/use-agents";
+import { AgentListItem } from "@/lib/types";
 import {
   Users,
   UserCheck,
@@ -47,8 +48,46 @@ type Bonus = {
   value: number;
 };
 
+interface RawUser {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+  businesses: number;
+  rawRevenue: number;
+  conversion: number;
+  status: string;
+  managerId?: string;
+  recruitCount?: number;
+}
+
+interface BonusBreakdownItem {
+  name: string;
+  amount: number;
+}
+
+interface AgentUser extends RawUser {
+  revenue: number;
+  agentBaseCommission: number;
+  agentTotalPayout: number;
+  managerCommission: number;
+  bonusBreakdown: BonusBreakdownItem[];
+}
+
+interface ManagerUser extends RawUser {
+  revenue: number;
+  agentBaseCommission: number;
+  agentTotalPayout: number;
+  managerCommission: number;
+  bonusBreakdown: BonusBreakdownItem[];
+  recruitCount: number;
+}
+
+type ProcessedUser = AgentUser | ManagerUser;
+
 export default function AgentsPage() {
-  const [selectedAgent, setSelectedAgent] = useState<any>(null);
+  const [selectedAgent, setSelectedAgent] = useState<ProcessedUser | null>(null);
 
   // --- COMPENSATION STATE ---
   const [agentRate, setAgentRate] = useState<number>(15);
@@ -65,7 +104,7 @@ export default function AgentsPage() {
 
   const rawUsers = useMemo(() => {
     if (!backendData || !backendData.agents) return [];
-    return backendData.agents.map((agent: any) => ({
+    return backendData.agents.map((agent: AgentListItem) => ({
       id: agent.id,
       name: agent.name,
       email: agent.email,
@@ -87,8 +126,8 @@ export default function AgentsPage() {
     let totalBonusesPaid = 0;
 
     // 1. Process Agents
-    const rawOnlyAgents = rawUsers.filter((u: any) => u.role === "Agent");
-    const agents = rawOnlyAgents.map((agent: any) => {
+    const rawOnlyAgents = rawUsers.filter((u: RawUser) => u.role === "Agent");
+    const agents = rawOnlyAgents.map((agent: RawUser) => {
       // Base Commission
       const agentBase = agent.rawRevenue * (agentRate / 100);
       const managerBase = agent.rawRevenue * (managerRate / 100);
@@ -127,19 +166,19 @@ export default function AgentsPage() {
 
     // 2. Process Managers
     const managers = rawUsers
-      .filter((u: any) => u.role === "Manager")
-      .map((manager: any) => {
-        const recruits = agents.filter((a: any) => a.managerId === manager.id);
+      .filter((u: RawUser) => u.role === "Manager")
+      .map((manager: RawUser) => {
+        const recruits = agents.filter((a: AgentUser) => a.managerId === manager.id);
         const totalRecruitRevenue = recruits.reduce(
-          (sum: number, a: any) => sum + a.revenue,
+          (sum: number, a: AgentUser) => sum + a.revenue,
           0,
         );
         const totalAcquired = recruits.reduce(
-          (sum: number, a: any) => sum + a.businesses,
+          (sum: number, a: AgentUser) => sum + a.businesses,
           0,
         );
         const totalManagerCutEarned = recruits.reduce(
-          (sum: number, a: any) => sum + a.managerCommission,
+          (sum: number, a: AgentUser) => sum + a.managerCommission,
           0,
         );
 
@@ -213,14 +252,14 @@ export default function AgentsPage() {
     setBonuses(bonuses.filter((b) => b.id !== id));
   };
 
-  const updateBonus = (id: string, field: keyof Bonus, value: any) => {
+  const updateBonus = (id: string, field: keyof Bonus, value: string | number) => {
     setBonuses(
       bonuses.map((b) => (b.id === id ? { ...b, [field]: value } : b)),
     );
   };
 
   // Generate pie chart data for drilldown dynamically
-  const generatePieData = (agent: any) => {
+  const generatePieData = (agent: ProcessedUser) => {
     if (agent.role === "Manager") {
       return [
         {
@@ -235,18 +274,20 @@ export default function AgentsPage() {
         value: agent.agentBaseCommission,
       },
     ];
-    agent.bonusBreakdown.forEach((b: any) => {
+    agent.bonusBreakdown.forEach((b: BonusBreakdownItem) => {
       data.push({ name: b.name, value: b.amount });
     });
     return data;
   };
 
   // Close panel on escape key
-  if (typeof window !== "undefined") {
-    window.onkeydown = (e) => {
+  useEffect(() => {
+    const handler = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") setSelectedAgent(null);
     };
-  }
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   if (isLoading) {
     return (
@@ -357,7 +398,7 @@ export default function AgentsPage() {
 
             {bonuses.length === 0 ? (
               <div className="text-center p-6 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-500 text-sm">
-                No active bonuses. Click "Add Bonus" to create one.
+                No active bonuses. Click &quot;Add Bonus&quot; to create one.
               </div>
             ) : (
               <div className="space-y-3">
@@ -474,7 +515,7 @@ export default function AgentsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-              {processedUsers.map((user: any) => (
+              {processedUsers.map((user: ProcessedUser) => (
                 <tr
                   key={user.id}
                   onClick={() => setSelectedAgent(user)}
@@ -513,7 +554,7 @@ export default function AgentsPage() {
                       </span>
                       {user.role === "Manager" && (
                         <span className="text-xs text-purple-500">
-                          {(user as any).recruitCount} recruits
+                          {(user as ManagerUser).recruitCount} recruits
                         </span>
                       )}
                     </div>
@@ -690,7 +731,7 @@ export default function AgentsPage() {
                         axisLine={false}
                       />
                       <RechartsTooltip
-                        formatter={(value: any) => [
+                        formatter={(value: unknown) => [
                           formatNaira(Number(value)),
                           "Revenue",
                         ]}
@@ -742,7 +783,7 @@ export default function AgentsPage() {
                         ))}
                       </Pie>
                       <RechartsTooltip
-                        formatter={(value: any) => [
+                        formatter={(value: unknown) => [
                           formatNaira(Number(value)),
                           "Amount",
                         ]}

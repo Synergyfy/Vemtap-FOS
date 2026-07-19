@@ -1,58 +1,59 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  LayoutDashboard,
   Settings,
   Bell,
   User,
-  LineChart,
-  BarChart3,
-  Users,
-  Building2,
-  MessageSquare,
-  QrCode,
-  Receipt,
-  PiggyBank,
-  Wallet,
   Target,
-  Mail,
+  BarChart3,
+  Building2,
+  Calendar,
   LogOut,
   ChevronDown,
+  ChevronRight,
   Menu,
   X,
-  Coins
+  LayoutDashboard,
+  TrendingUp,
+  DollarSign,
+  RefreshCw,
+  Users,
+  GitBranch,
+  MessageSquare,
+  Mail,
+  Percent,
+  FileText,
+  Flag,
+  Wallet,
+  Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 
-let _cachedRaw: string | null = null;
-let _cachedUser: Record<string, unknown> | null = null;
-
-function getFosUserSnapshot(): Record<string, unknown> | null {
-  const raw = localStorage.getItem("fos_user");
-  if (raw === _cachedRaw) return _cachedUser;
-  _cachedRaw = raw;
-  _cachedUser = raw ? JSON.parse(raw) : null;
-  return _cachedUser;
+interface SidebarItem {
+  label: string;
+  href?: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  items?: { label: string; href: string }[];
 }
 
-const sidebarItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-  { icon: Target, label: "Financial Planning", href: "/financial-planning" },
-  { icon: Coins, label: "Commission Planning", href: "/commission-planning" },
-  { icon: LineChart, label: "Forecasting", href: "/forecasting" },
-  { icon: BarChart3, label: "Revenue Analytics", href: "/revenue-analytics" },
-  { icon: Users, label: "Agents", href: "/agents" },
-  { icon: Building2, label: "Businesses", href: "/businesses" },
-  { icon: MessageSquare, label: "SMS", href: "/sms" },
-  { icon: Mail, label: "Email", href: "/email" },
-  { icon: QrCode, label: "QRThrive Funnel", href: "/qrthrive-funnel" },
-  { icon: Receipt, label: "Expenses", href: "/expenses" },
-  { icon: PiggyBank, label: "Profit & Loss", href: "/profit-and-loss" },
-  { icon: Wallet, label: "Cash Flow", href: "/cash-flow" },
-  { icon: Settings, label: "Settings", href: "/settings" },
+const sidebarSections: SidebarItem[] = [
+  { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+  { label: "Revenue", icon: TrendingUp, href: "/revenue" },
+  { label: "Expenses", icon: DollarSign, href: "/expenses" },
+  { label: "Financials", icon: BarChart3, href: "/financials" },
+  {
+    label: "Planning",
+    icon: Target,
+    items: [
+      { label: "Overview", href: "/planning" },
+      { label: "Scenarios", href: "/planning/scenarios" },
+    ],
+  },
+  { label: "Settings", icon: Settings, href: "/settings" },
 ];
 
 export default function DashboardLayout({
@@ -64,12 +65,24 @@ export default function DashboardLayout({
   const router = useRouter();
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
+    const set = new Set<string>();
+    sidebarSections.forEach((s) => {
+      if (s.items?.some((i) => pathname === i.href)) set.add(s.label);
+    });
+    return set;
+  });
 
-  const userProfile = useSyncExternalStore(
-    () => () => { },
-    getFosUserSnapshot,
-    () => null,
-  );
+  const toggleSection = (label: string) => {
+    setExpandedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  };
+
+  const { user: userProfile, logout: authLogout } = useAuth();
 
   const displayName = String(userProfile?.name ?? (userProfile?.firstName && userProfile?.lastName
     ? `${userProfile.firstName} ${userProfile.lastName}`
@@ -78,8 +91,7 @@ export default function DashboardLayout({
 
   const handleLogout = (e: React.MouseEvent) => {
     e.preventDefault();
-    localStorage.removeItem("fos_access_token");
-    localStorage.removeItem("fos_user");
+    authLogout();
     router.push("/login");
     router.refresh();
   };
@@ -125,21 +137,63 @@ export default function DashboardLayout({
           </button>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto hide-scrollbar">
-          {sidebarItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
-                ${pathname === item.href
-                  ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-50"
-                }`}
-            >
-              <item.icon className="w-4 h-4" />
-              {item.label}
-            </Link>
-          ))}
+        <nav className="flex-1 p-4 space-y-0.5 overflow-y-auto hide-scrollbar">
+          {sidebarSections.map((section) => {
+            const SectionIcon = section.icon;
+
+            if (section.items) {
+              const isExpanded = expandedSections.has(section.label);
+              const isActive = section.items.some((i) => pathname === i.href);
+              return (
+                <div key={section.label}>
+                  <button
+                    onClick={() => toggleSection(section.label)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left
+                      ${isActive
+                        ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                        : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-50"
+                      }`}
+                  >
+                    {SectionIcon && <SectionIcon className="w-4 h-4 shrink-0" />}
+                    <span className="flex-1">{section.label}</span>
+                    {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                  </button>
+                  {isExpanded && (
+                    <div className="ml-6 mt-1 space-y-0.5">
+                      {section.items.map((sub) => (
+                        <Link
+                          key={sub.href}
+                          href={sub.href}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors
+                            ${pathname === sub.href
+                              ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 font-medium"
+                              : "text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-50"
+                            }`}
+                        >
+                          {sub.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            return (
+              <Link
+                key={section.label}
+                href={section.href!}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                  ${pathname === section.href || (section.href !== "/" && pathname.startsWith(section.href!))
+                    ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                    : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-50"
+                  }`}
+              >
+                {SectionIcon && <SectionIcon className="w-4 h-4 shrink-0" />}
+                <span>{section.label}</span>
+              </Link>
+            );
+          })}
         </nav>
 
         <div className="p-4 border-t border-zinc-200 dark:border-zinc-800">

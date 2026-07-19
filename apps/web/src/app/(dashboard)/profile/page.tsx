@@ -3,15 +3,6 @@
 import { useSyncExternalStore } from "react";
 import { User, Mail, Clock, Activity, Building2 } from "lucide-react";
 
-interface FosUser {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  role: string;
-  [key: string]: unknown;
-}
-
 let _cachedRaw: string | null = null;
 let _cachedUser: Record<string, unknown> | null = null;
 
