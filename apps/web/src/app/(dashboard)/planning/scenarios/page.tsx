@@ -5,7 +5,7 @@ import {
   Plus, Trash2, TrendingUp, TrendingDown, RotateCcw, Check,
   Target, Megaphone, Tag,
   Monitor, Building2, Wrench, Zap, ChevronDown,
-  ChevronUp, ArrowRight, BarChart3,
+  ChevronUp, ArrowRight, BarChart3, X, Save, Download,
   Briefcase, Laptop, Headphones, Palette,
 } from "lucide-react";
 import { useBreakEven, useRunway } from "@/lib/hooks/use-pnl";
@@ -23,8 +23,8 @@ const FREQUENCIES: { value: Frequency; label: string }[] = [
   { value: "yearly", label: "Yearly" },
 ];
 
-interface IncomeSource { id: string; name: string; amount: number; frequency: Frequency; growth: number; active: boolean; unitPrice?: number; customers?: number }
-interface ExpenseSource { id: string; name: string; amount: number; frequency: Frequency; growth: number; active: boolean }
+interface IncomeSource { id: string; name: string; amount: number; frequency: Frequency; growth: number; active: boolean; unitPrice?: number; customers?: number; linkedToId?: string; linkedPct?: number; quantity: number }
+interface ExpenseSource { id: string; name: string; amount: number; frequency: Frequency; growth: number; active: boolean; linkedToId?: string; linkedPct?: number; quantity: number }
 
 type ScenarioType =
   | "hire-sales" | "hire-developer" | "hire-designer" | "hire-support"
@@ -70,6 +70,15 @@ interface ScenarioInstance {
   items: ScenarioLineItem[];
 }
 
+interface SavedScenario {
+  id: string;
+  name: string;
+  createdAt: string;
+  incomes: IncomeSource[];
+  expenses: ExpenseSource[];
+  scenarios: ScenarioInstance[];
+}
+
 const SCENARIO_TPL = [
   { type: "hire-sales" as ScenarioType, icon: Briefcase, title: "Hire Sales Person", desc: "Add sales headcount with targets and commission" },
   { type: "hire-developer" as ScenarioType, icon: Laptop, title: "Hire Developer", desc: "Add engineering talent to your team" },
@@ -84,6 +93,9 @@ const SCENARIO_TPL = [
   { type: "office" as ScenarioType, icon: Building2, title: "Office Expansion", desc: "Open or expand office space" },
   { type: "custom" as ScenarioType, icon: BarChart3, title: "Custom Scenario", desc: "Build your own from scratch" },
 ];
+
+const REVENUE_TPL = SCENARIO_TPL.filter((t) => t.type === "change-pricing" || t.type === "custom");
+const EXPENSE_TPL = SCENARIO_TPL.filter((t) => t.type !== "change-pricing");
 
 const DEFAULT_PRICING: PricingModel = {
   silverPrice: 8_000, goldPrice: 15_000, platinumPrice: 30_000, enterprisePrice: 100_000,
@@ -117,18 +129,8 @@ function generateItems(params: ScenarioParams): ScenarioLineItem[] {
   switch (params.type) {
     case "idle": break;
     case "hire-sales": {
-      const silverCx = Math.round(params.target * (params.silverPct / 100));
-      const goldCx = Math.round(params.target * (params.goldPct / 100));
-      const platinumCx = Math.round(params.target * (params.platinumPct / 100));
-      const enterpriseCx = Math.round(params.target * (params.enterprisePct / 100));
-      const revenue = silverCx * 8000 + goldCx * 15000 + platinumCx * 30000 + enterpriseCx * 100000;
-      let commission = 0;
-      if (params.commission.type === "percentage") commission = revenue * (params.commission.rate / 100);
-      else commission = params.commission.rate;
-      items.push({ id: uid(), name: "Subscription Revenue", type: "revenue", amount: revenue, frequency: "monthly", locked: true });
       items.push({ id: uid(), name: "Salaries", type: "expense", amount: params.count * params.salary, frequency: "monthly", locked: true });
       items.push({ id: uid(), name: "Allowances", type: "expense", amount: params.count * params.allowance, frequency: "monthly", locked: true });
-      if (commission > 0) items.push({ id: uid(), name: "Commission", type: "expense", amount: commission, frequency: "monthly", locked: true });
       break;
     }
     case "hire-developer":
@@ -138,9 +140,7 @@ function generateItems(params: ScenarioParams): ScenarioLineItem[] {
       break;
     }
     case "marketing": {
-      const avgRev = (8000 + 15000 + 30000) / 3;
       items.push({ id: uid(), name: "Ad Spend", type: "expense", amount: params.budget, frequency: "monthly", locked: true });
-      items.push({ id: uid(), name: "Customer Revenue", type: "revenue", amount: params.businesses * avgRev, frequency: "monthly", locked: true });
       break;
     }
     case "change-pricing": {
@@ -151,13 +151,11 @@ function generateItems(params: ScenarioParams): ScenarioLineItem[] {
       break;
     }
     case "new-product": {
-      items.push({ id: uid(), name: "Product Revenue", type: "revenue", amount: params.expectedRevenue, frequency: "monthly", locked: true });
       items.push({ id: uid(), name: "Development Cost", type: "expense", amount: params.devCost, frequency: "one-time", locked: true });
       items.push({ id: uid(), name: "Launch Cost", type: "expense", amount: params.launchCost, frequency: "one-time", locked: true });
       break;
     }
     case "enterprise-project": {
-      items.push({ id: uid(), name: "Project Revenue", type: "revenue", amount: params.projectValue / params.duration, frequency: "monthly", locked: true });
       items.push({ id: uid(), name: "Project Cost", type: "expense", amount: params.cost / params.duration, frequency: "monthly", locked: true });
       break;
     }
@@ -218,13 +216,50 @@ export default function ScenariosPage() {
   const { data: runway } = useRunway();
 
   const [incomes, setIncomes] = useState<IncomeSource[]>(() => [
-    { id: uid(), name: "Silver Subscription", amount: 200 * 8000, frequency: "monthly", growth: 0, active: true, unitPrice: 8000, customers: 200 },
-    { id: uid(), name: "Gold Subscription", amount: 100 * 15000, frequency: "monthly", growth: 0, active: true, unitPrice: 15000, customers: 100 },
-    { id: uid(), name: "Platinum Subscription", amount: 42 * 30000, frequency: "monthly", growth: 0, active: true, unitPrice: 30000, customers: 42 },
-    { id: uid(), name: "Enterprise Subscription", amount: 10 * 100000, frequency: "monthly", growth: 0, active: true, unitPrice: 100000, customers: 10 },
+    { id: uid(), name: "Silver Subscription", amount: 200 * 8000, frequency: "monthly", growth: 0, active: true, unitPrice: 8000, customers: 200, quantity: 1 },
+    { id: uid(), name: "Gold Subscription", amount: 100 * 15000, frequency: "monthly", growth: 0, active: true, unitPrice: 15000, customers: 100, quantity: 1 },
+    { id: uid(), name: "Platinum Subscription", amount: 42 * 30000, frequency: "monthly", growth: 0, active: true, unitPrice: 30000, customers: 42, quantity: 1 },
+    { id: uid(), name: "Enterprise Subscription", amount: 10 * 100000, frequency: "monthly", growth: 0, active: true, unitPrice: 100000, customers: 10, quantity: 1 },
   ]);
   const [expenses, setExpenses] = useState<ExpenseSource[]>([]);
   const [scenarios, setScenarios] = useState<ScenarioInstance[]>([]);
+  const [decisionTab, setDecisionTab] = useState<"revenue" | "expense">("expense");
+  const [showPickerModal, setShowPickerModal] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
+  const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>(() => {
+    try { return JSON.parse(localStorage.getItem("vemtap-saved") || "[]"); } catch { return []; }
+  });
+
+  const saveSnapshot = useCallback(() => {
+    setSavedScenarios((prev) => {
+      const entry: SavedScenario = { id: uid(), name: `Plan ${prev.length + 1}`, createdAt: new Date().toISOString(), incomes, expenses, scenarios };
+      const updated = [...prev, entry];
+      localStorage.setItem("vemtap-saved", JSON.stringify(updated));
+      return updated;
+    });
+  }, [incomes, expenses, scenarios]);
+
+  const deleteSaved = useCallback((id: string) => {
+    setSavedScenarios((prev) => {
+      const updated = prev.filter((s) => s.id !== id);
+      localStorage.setItem("vemtap-saved", JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  const loadSaved = useCallback((saved: SavedScenario) => {
+    setIncomes(saved.incomes);
+    setExpenses(saved.expenses);
+    setScenarios(saved.scenarios);
+    setShowSaved(false);
+  }, []);
+
+  const exportSaved = useCallback((saved: SavedScenario) => {
+    const blob = new Blob([JSON.stringify(saved, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `${saved.name.replace(/\s+/g, "-").toLowerCase()}.json`; a.click();
+    URL.revokeObjectURL(url);
+  }, []);
 
   const addScenario = useCallback((type: ScenarioType) => {
     const params = defaultParams(type);
@@ -252,14 +287,14 @@ export default function ScenariosPage() {
   }, []);
 
   const DEFAULT_PLANS: Omit<IncomeSource, "id">[] = [
-    { name: "Silver Subscription", amount: 200 * 8000, frequency: "monthly", growth: 0, active: true, unitPrice: 8000, customers: 200 },
-    { name: "Gold Subscription", amount: 100 * 15000, frequency: "monthly", growth: 0, active: true, unitPrice: 15000, customers: 100 },
-    { name: "Platinum Subscription", amount: 42 * 30000, frequency: "monthly", growth: 0, active: true, unitPrice: 30000, customers: 42 },
-    { name: "Enterprise Subscription", amount: 10 * 100000, frequency: "monthly", growth: 0, active: true, unitPrice: 100000, customers: 10 },
+    { name: "Silver Subscription", amount: 200 * 8000, frequency: "monthly", growth: 0, active: true, unitPrice: 8000, customers: 200, quantity: 1 },
+    { name: "Gold Subscription", amount: 100 * 15000, frequency: "monthly", growth: 0, active: true, unitPrice: 15000, customers: 100, quantity: 1 },
+    { name: "Platinum Subscription", amount: 42 * 30000, frequency: "monthly", growth: 0, active: true, unitPrice: 30000, customers: 42, quantity: 1 },
+    { name: "Enterprise Subscription", amount: 10 * 100000, frequency: "monthly", growth: 0, active: true, unitPrice: 100000, customers: 10, quantity: 1 },
   ];
   const [showPlanPicker, setShowPlanPicker] = useState(false);
   const [selectedPlans, setSelectedPlans] = useState<Set<number>>(new Set([0, 1, 2, 3]));
-  const addIncome = () => setIncomes((prev) => [...prev, { id: uid(), name: "", amount: 0, frequency: "monthly", growth: 0, active: true }]);
+  const addIncome = () => setIncomes((prev) => [...prev, { id: uid(), name: "", amount: 0, frequency: "monthly", growth: 0, active: true, quantity: 1 }]);
   const addDefaultPlans = (indices: number[]) => setIncomes((prev) => {
     const names = new Set(prev.map((i) => i.name));
     return [...prev, ...indices.filter((i) => !names.has(DEFAULT_PLANS[i].name)).map((i) => ({ id: uid(), ...DEFAULT_PLANS[i] }))];
@@ -285,23 +320,39 @@ export default function ScenariosPage() {
     }));
   };
   const removeIncome = (id: string) => setIncomes((prev) => prev.filter((i) => i.id !== id));
-  const addExpense = () => setExpenses((prev) => [...prev, { id: uid(), name: "", amount: 0, frequency: "monthly", growth: 0, active: true }]);
+  const addExpense = () => setExpenses((prev) => [...prev, { id: uid(), name: "", amount: 0, frequency: "monthly", growth: 0, active: true, quantity: 1 }]);
   const updateExpense = (id: string, upd: Partial<ExpenseSource>) => setExpenses((prev) => prev.map((e) => (e.id === id ? { ...e, ...upd } : e)));
   const removeExpense = (id: string) => setExpenses((prev) => prev.filter((e) => e.id !== id));
+
+  const onIncomeLinkedChange = useCallback((id: string, linkedToId: string | undefined, linkedPct: number | undefined) => {
+    setIncomes((prev) => prev.map((i) => i.id === id ? { ...i, linkedToId, linkedPct } : i));
+  }, []);
+  const onExpenseLinkedChange = useCallback((id: string, linkedToId: string | undefined, linkedPct: number | undefined) => {
+    setExpenses((prev) => prev.map((e) => e.id === id ? { ...e, linkedToId, linkedPct } : e));
+  }, []);
+
+  const resolveAmount = useCallback((source: { amount: number; linkedToId?: string; linkedPct?: number; quantity?: number }, allSources: { id: string; amount: number }[]) => {
+    let base = source.amount;
+    if (source.linkedToId && source.linkedPct !== undefined) {
+      const ref = allSources.find((s) => s.id === source.linkedToId);
+      if (ref) base = Math.round(ref.amount * source.linkedPct / 100);
+    }
+    return base * (source.quantity ?? 1);
+  }, []);
 
   /* ──────── Base financials ──────── */
 
   const baseIncome = useMemo(() => {
     let monthly = 0, annual = 0;
-    for (const inc of incomes) { if (!inc.active) continue; const m = toMonthly(inc.amount, inc.frequency); monthly += m; annual += toAnnual(inc.amount, inc.frequency); }
+    for (const inc of incomes) { if (!inc.active) continue; const amt = resolveAmount(inc, incomes); const m = toMonthly(amt, inc.frequency); monthly += m; annual += toAnnual(amt, inc.frequency); }
     return { monthly, annual };
-  }, [incomes]);
+  }, [incomes, resolveAmount]);
 
   const baseExpense = useMemo(() => {
     let monthly = 0, annual = 0;
-    for (const exp of expenses) { if (!exp.active) continue; const m = toMonthly(exp.amount, exp.frequency); monthly += m; annual += toAnnual(exp.amount, exp.frequency); }
+    for (const exp of expenses) { if (!exp.active) continue; const amt = resolveAmount(exp, expenses); const m = toMonthly(amt, exp.frequency); monthly += m; annual += toAnnual(amt, exp.frequency); }
     return { monthly, annual };
-  }, [expenses]);
+  }, [expenses, resolveAmount]);
 
   const baseNetMonthly = baseIncome.monthly - baseExpense.monthly;
 
@@ -369,6 +420,7 @@ export default function ScenariosPage() {
             {incomes.map((inc) => (
               <SourceRow key={inc.id} name={inc.name} amount={inc.amount} frequency={inc.frequency} growth={inc.growth} active={inc.active}
                 unitPrice={inc.unitPrice} customers={inc.customers}
+                linkedToId={inc.linkedToId} linkedPct={inc.linkedPct} quantity={inc.quantity}
                 onNameChange={(v) => updateIncome(inc.id, { name: v })}
                 onAmountChange={(v) => updateIncome(inc.id, { amount: v })}
                 onFrequencyChange={(v) => updateIncome(inc.id, { frequency: v })}
@@ -376,7 +428,10 @@ export default function ScenariosPage() {
                 onActiveChange={(v) => updateIncome(inc.id, { active: v })}
                 onRemove={() => removeIncome(inc.id)}
                 onUnitPriceChange={inc.unitPrice !== undefined ? (v) => updateIncome(inc.id, { unitPrice: v }) : undefined}
-                onCustomersChange={inc.customers !== undefined ? (v) => updateIncome(inc.id, { customers: v }) : undefined} />
+                onCustomersChange={inc.customers !== undefined ? (v) => updateIncome(inc.id, { customers: v }) : undefined}
+                onLinkedChange={(lid, pct) => onIncomeLinkedChange(inc.id, lid, pct)}
+                onQuantityChange={(v) => updateIncome(inc.id, { quantity: v })}
+                allSources={incomes.map((i) => ({ id: i.id, name: i.name, amount: resolveAmount(i, incomes) }))} />
             ))}
             <div className="flex gap-3">
               <button onClick={addIncome} className="flex-1 py-3 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl text-sm text-zinc-400 hover:text-emerald-500 hover:border-emerald-300 dark:hover:border-emerald-700 transition-colors flex items-center justify-center gap-2">
@@ -417,12 +472,16 @@ export default function ScenariosPage() {
           <SectionCard icon={TrendingDown} iconColor="text-red-500" title="Money Going Out" description="Add all your expenses — salaries, marketing, hosting, rent, etc.">
             {expenses.map((exp) => (
               <SourceRow key={exp.id} name={exp.name} amount={exp.amount} frequency={exp.frequency} growth={exp.growth} active={exp.active}
+                linkedToId={exp.linkedToId} linkedPct={exp.linkedPct} quantity={exp.quantity}
                 onNameChange={(v) => updateExpense(exp.id, { name: v })}
                 onAmountChange={(v) => updateExpense(exp.id, { amount: v })}
                 onFrequencyChange={(v) => updateExpense(exp.id, { frequency: v })}
                 onGrowthChange={(v) => updateExpense(exp.id, { growth: v })}
                 onActiveChange={(v) => updateExpense(exp.id, { active: v })}
-                onRemove={() => removeExpense(exp.id)} />
+                onRemove={() => removeExpense(exp.id)}
+                onLinkedChange={(lid, pct) => onExpenseLinkedChange(exp.id, lid, pct)}
+                onQuantityChange={(v) => updateExpense(exp.id, { quantity: v })}
+                allSources={expenses.map((e) => ({ id: e.id, name: e.name, amount: resolveAmount(e, expenses) }))} />
             ))}
             <button onClick={addExpense} className="w-full py-3 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl text-sm text-zinc-400 hover:text-red-500 hover:border-red-300 dark:hover:border-red-700 transition-colors flex items-center justify-center gap-2">
               <Plus className="w-4 h-4" /> Add Expense
@@ -431,25 +490,19 @@ export default function ScenariosPage() {
 
           {/* ════════ 3. BUSINESS DECISION ════════ */}
           <SectionCard icon={BarChart3} iconColor="text-blue-500" title="Business Decision" description="What business decision do you want to test?">
+
             {scenarios.length === 0 ? (
-              /* Template grid (no scenarios yet) */
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {SCENARIO_TPL.map((tpl) => {
-                  const Icon = tpl.icon;
-                  return (
-                    <button key={tpl.type} onClick={() => addScenario(tpl.type)}
-                      className="flex items-start gap-3 p-4 bg-zinc-50 dark:bg-zinc-950/50 hover:bg-blue-50 dark:hover:bg-blue-900/10 border border-zinc-200 dark:border-zinc-800 hover:border-blue-200 dark:hover:border-blue-800/50 rounded-xl text-left transition-all group">
-                      <div className="p-2 bg-white dark:bg-zinc-900 rounded-lg shadow-sm border border-zinc-100 dark:border-zinc-800 shrink-0 group-hover:scale-110 transition-transform">
-                        <Icon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                      </div>
-                      <div className="min-w-0">
-                        <h3 className="font-semibold text-zinc-900 dark:text-zinc-100 text-sm">{tpl.title}</h3>
-                        <p className="text-xs text-zinc-500 mt-0.5">{tpl.desc}</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+              /* Empty state — launch modal CTA */
+              <button onClick={() => setShowPickerModal(true)}
+                className="w-full py-12 flex flex-col items-center justify-center gap-3 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-400 hover:text-blue-500 hover:border-blue-300 dark:hover:border-blue-700 transition-colors group">
+                <div className="p-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 transition-colors">
+                  <BarChart3 className="w-8 h-8" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-zinc-600 dark:text-zinc-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">Launch Scenario Builder</p>
+                  <p className="text-xs text-zinc-400 mt-0.5">Model expenses, revenue changes, and what-if scenarios</p>
+                </div>
+              </button>
             ) : (
               <div className="space-y-4">
                 {scenarios.map((sc) => (
@@ -463,11 +516,57 @@ export default function ScenariosPage() {
                     onAddCustomItem={() => addCustomItem(sc.id)}
                   />
                 ))}
-                <div className="flex gap-3">
-                  <AddScenarioButton onSelect={addScenario} />
-                </div>
+                <button onClick={() => setShowPickerModal(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors">
+                  <Plus className="w-4 h-4" /> New Scenario
+                </button>
               </div>
             )}
+
+            {/* ──────── Scenario Picker Modal ──────── */}
+            {showPickerModal && (
+              <ScenarioPickerModal
+                tab={decisionTab}
+                onTabChange={setDecisionTab}
+                onSelect={(type) => { addScenario(type); setShowPickerModal(false); }}
+                onClose={() => setShowPickerModal(false)}
+              />
+            )}
+
+            {/* ──────── Saved Scenarios ──────── */}
+            <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <button onClick={() => setShowSaved(!showSaved)}
+                className="flex items-center gap-2 text-sm font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors">
+                <RotateCcw className={`w-3.5 h-3.5 transition-transform ${showSaved ? "rotate-45" : ""}`} />
+                Saved Plans ({savedScenarios.length})
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showSaved ? "rotate-180" : ""}`} />
+              </button>
+              {showSaved && (
+                <div className="mt-3 space-y-1.5">
+                  <button onClick={saveSnapshot} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                    <Save className="w-4 h-4" /> Save Current Plan
+                  </button>
+                  {savedScenarios.length === 0 ? (
+                    <p className="text-xs text-zinc-400 px-3 py-2">No saved plans yet.</p>
+                  ) : (
+                    [...savedScenarios].reverse().map((s) => (
+                      <div key={s.id} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/60 group transition-colors">
+                        <button onClick={() => loadSaved(s)} className="flex-1 text-left min-w-0">
+                          <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300 truncate">{s.name}</div>
+                          <div className="text-[11px] text-zinc-400">{new Date(s.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+                        </button>
+                        <button onClick={() => exportSaved(s)} className="p-1.5 text-zinc-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all" title="Export JSON">
+                          <Download className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => deleteSaved(s.id)} className="p-1.5 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all" title="Delete">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </SectionCard>
         </div>
 
@@ -507,34 +606,60 @@ function SectionCard({ icon: Icon, iconColor, title, description, children }: {
   );
 }
 
-/* ──────── Add Scenario button ──────── */
+/* ──────── Scenario Picker Modal ──────── */
 
-function AddScenarioButton({ onSelect }: { onSelect: (type: ScenarioType) => void }) {
-  const [open, setOpen] = useState(false);
+function ScenarioPickerModal({ tab, onTabChange, onSelect, onClose }: {
+  tab: "revenue" | "expense"; onTabChange: (t: "revenue" | "expense") => void;
+  onSelect: (type: ScenarioType) => void; onClose: () => void;
+}) {
+  const tplList = tab === "revenue" ? REVENUE_TPL : EXPENSE_TPL;
   return (
-    <div className="relative">
-      <button onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors">
-        <Plus className="w-4 h-4" /> Add Scenario
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-2 z-20 w-72 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-xl p-2 space-y-0.5 animate-in fade-in slide-in-from-top-2">
-            {SCENARIO_TPL.map((tpl) => {
+    <>
+      <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-lg bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-700 shadow-2xl animate-in fade-in zoom-in-95">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 pt-6 pb-4">
+            <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-50">Choose a Scenario</h3>
+            <button onClick={onClose} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          {/* Tabs */}
+          <div className="px-6 pb-4">
+            <div className="flex gap-1 p-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl w-fit">
+              <button onClick={() => onTabChange("expense")}
+                className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-all ${tab === "expense" ? "bg-white dark:bg-zinc-700 text-red-600 dark:text-red-400 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}>
+                <TrendingDown className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />Expense
+              </button>
+              <button onClick={() => onTabChange("revenue")}
+                className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-all ${tab === "revenue" ? "bg-white dark:bg-zinc-700 text-emerald-600 dark:text-emerald-400 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}>
+                <TrendingUp className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />Revenue
+              </button>
+            </div>
+          </div>
+          {/* Template list */}
+          <div className="px-6 pb-6 max-h-80 overflow-y-auto space-y-1.5">
+            {tplList.map((tpl) => {
               const Icon = tpl.icon;
               return (
-                <button key={tpl.type} onClick={() => { onSelect(tpl.type); setOpen(false); }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
-                  <Icon className="w-4 h-4 text-zinc-500 shrink-0" />
-                  <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{tpl.title}</span>
+                <button key={tpl.type} onClick={() => onSelect(tpl.type)}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/60 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 transition-all group">
+                  <div className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 group-hover:bg-white dark:group-hover:bg-zinc-700 shadow-sm transition-colors">
+                    <Icon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">{tpl.title}</div>
+                    <div className="text-xs text-zinc-500">{tpl.desc}</div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-zinc-300 group-hover:text-blue-500 transition-colors shrink-0" />
                 </button>
               );
             })}
           </div>
-        </>
-      )}
-    </div>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -1138,14 +1263,23 @@ function ResultsPanel({
 
 /* ──────── Utility Components ──────── */
 
-function SourceRow({ name, amount, frequency, growth, active, unitPrice, customers, onNameChange, onAmountChange, onFrequencyChange, onGrowthChange, onActiveChange, onRemove, onUnitPriceChange, onCustomersChange }: {
+function SourceRow({ name, amount, frequency, growth, active, unitPrice, customers, linkedToId, linkedPct, quantity, onNameChange, onAmountChange, onFrequencyChange, onGrowthChange, onActiveChange, onRemove, onUnitPriceChange, onCustomersChange, onLinkedChange, onQuantityChange, allSources }: {
   name: string; amount: number; frequency: Frequency; growth: number; active: boolean; unitPrice?: number; customers?: number;
+  linkedToId?: string; linkedPct?: number; quantity?: number;
   onNameChange: (v: string) => void; onAmountChange: (v: number) => void; onFrequencyChange: (v: Frequency) => void;
   onGrowthChange: (v: number) => void; onActiveChange: (v: boolean) => void; onRemove: () => void;
   onUnitPriceChange?: (v: number) => void; onCustomersChange?: (v: number) => void;
+  onLinkedChange?: (linkedToId: string | undefined, linkedPct: number | undefined) => void;
+  onQuantityChange?: (v: number) => void;
+  allSources?: { id: string; name: string; amount: number }[];
 }) {
   const [open, setOpen] = useState(unitPrice !== undefined && customers !== undefined);
-  const monthly = toMonthly(amount, frequency);
+  const isLinked = linkedToId && linkedPct !== undefined;
+  const linkedSource = isLinked && allSources ? allSources.find((s) => s.id === linkedToId) : undefined;
+  const baseAmount = isLinked && linkedSource ? Math.round(linkedSource.amount * linkedPct / 100) : amount;
+  const qty = quantity ?? 1;
+  const totalAmount = baseAmount * qty;
+  const monthly = toMonthly(totalAmount, frequency);
   const isSubscription = unitPrice !== undefined && customers !== undefined;
   return (
     <div className={`group rounded-xl border transition-colors ${active ? "border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900" : "border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 opacity-60"}`}>
@@ -1156,6 +1290,7 @@ function SourceRow({ name, amount, frequency, growth, active, unitPrice, custome
         </button>
         <input type="text" value={name} onChange={(e) => onNameChange(e.target.value)} placeholder="Source name"
           className="flex-1 bg-transparent text-sm font-medium text-zinc-900 dark:text-zinc-50 focus:outline-none placeholder:text-zinc-300 dark:placeholder:text-zinc-600" />
+        {qty > 1 && <span className="text-xs text-zinc-400 tabular-nums shrink-0">×{qty}</span>}
         {isSubscription && onCustomersChange && (
           <span className="text-xs text-zinc-400 tabular-nums w-12 text-right">{customers} cx</span>
         )}
@@ -1193,25 +1328,108 @@ function SourceRow({ name, amount, frequency, growth, active, unitPrice, custome
                   </div>
                 </div>
               </>
+            ) : allSources && onLinkedChange ? (
+              <>
+                <div>
+                  <label className="block text-[11px] font-medium text-zinc-500 mb-1">Type</label>
+                  <select value={isLinked ? "linked" : "fixed"} onChange={(e) => onLinkedChange(e.target.value === "linked" ? (allSources[0]?.id || "") : undefined, e.target.value === "linked" ? 10 : undefined)}
+                    className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50">
+                    <option value="fixed">Fixed Amount</option>
+                    <option value="linked">% of Source</option>
+                  </select>
+                </div>
+                {isLinked ? (
+                  <>
+                    <div>
+                      <label className="block text-[11px] font-medium text-zinc-500 mb-1">Source</label>
+                      <select value={linkedToId} onChange={(e) => onLinkedChange(e.target.value, linkedPct)}
+                        className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50">
+                        <option value="">Select source...</option>
+                        {allSources.map((s) => <option key={s.id} value={s.id}>{s.name || "Untitled"} ({FMT(s.amount)})</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-zinc-500 mb-1">Percentage (%)</label>
+                      <input type="number" value={linkedPct || ""} onChange={(e) => onLinkedChange(linkedToId, Number(e.target.value))} placeholder="0" min={0} max={100}
+                        className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-zinc-500 mb-1">Quantity</label>
+                      <input type="number" value={qty} onChange={(e) => onQuantityChange?.(Math.max(1, Number(e.target.value)))} min={1}
+                        className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-zinc-500 mb-1">Computed Total</label>
+                      <div className="w-full h-9 flex items-center px-3 text-sm font-bold text-emerald-600 dark:text-emerald-400 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                        {FMT(totalAmount)}<span className="text-xs text-zinc-400 font-normal ml-1">({qty}× {linkedPct}% of {linkedSource?.name || "?"})</span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-[11px] font-medium text-zinc-500 mb-1">Amount</label>
+                      <input type="number" value={amount || ""} onChange={(e) => onAmountChange(Number(e.target.value))} placeholder="0"
+                        className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-zinc-500 mb-1">Quantity</label>
+                      <input type="number" value={qty} onChange={(e) => onQuantityChange?.(Math.max(1, Number(e.target.value)))} min={1}
+                        className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-zinc-500 mb-1">Total</label>
+                      <div className="w-full h-9 flex items-center px-3 text-sm font-bold text-zinc-900 dark:text-zinc-50 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                        {FMT(totalAmount)}<span className="text-xs text-zinc-400 font-normal ml-1">({qty}×)</span>
+                      </div>
+                    </div>
+                </>
+                )}
+                <div>
+                  <label className="block text-[11px] font-medium text-zinc-500 mb-1">Frequency</label>
+                  <select value={frequency} onChange={(e) => onFrequencyChange(e.target.value as Frequency)}
+                    className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50">
+                    {FREQUENCIES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-zinc-500 mb-1">Growth (%/mo)</label>
+                  <input type="number" value={growth || ""} onChange={(e) => onGrowthChange(Number(e.target.value))} placeholder="0"
+                    className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+                </div>
+              </>
             ) : (
-              <div>
-                <label className="block text-[11px] font-medium text-zinc-500 mb-1">Amount</label>
-                <input type="number" value={amount || ""} onChange={(e) => onAmountChange(Number(e.target.value))} placeholder="0"
-                  className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
-              </div>
+              <>
+                <div>
+                  <label className="block text-[11px] font-medium text-zinc-500 mb-1">Amount</label>
+                  <input type="number" value={amount || ""} onChange={(e) => onAmountChange(Number(e.target.value))} placeholder="0"
+                    className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-zinc-500 mb-1">Quantity</label>
+                  <input type="number" value={qty} onChange={(e) => onQuantityChange?.(Math.max(1, Number(e.target.value)))} min={1}
+                    className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-zinc-500 mb-1">Total</label>
+                  <div className="w-full h-9 flex items-center px-3 text-sm font-bold text-zinc-900 dark:text-zinc-50 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-200 dark:border-zinc-700">
+                    {FMT(totalAmount)}<span className="text-xs text-zinc-400 font-normal ml-1">({qty}×)</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-zinc-500 mb-1">Frequency</label>
+                  <select value={frequency} onChange={(e) => onFrequencyChange(e.target.value as Frequency)}
+                    className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50">
+                    {FREQUENCIES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-zinc-500 mb-1">Growth (%/mo)</label>
+                  <input type="number" value={growth || ""} onChange={(e) => onGrowthChange(Number(e.target.value))} placeholder="0"
+                    className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+                </div>
+              </>
             )}
-            <div>
-              <label className="block text-[11px] font-medium text-zinc-500 mb-1">Frequency</label>
-              <select value={frequency} onChange={(e) => onFrequencyChange(e.target.value as Frequency)}
-                className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50">
-                {FREQUENCIES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11px] font-medium text-zinc-500 mb-1">Growth (%/mo)</label>
-              <input type="number" value={growth || ""} onChange={(e) => onGrowthChange(Number(e.target.value))} placeholder="0"
-                className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
-            </div>
           </div>
         </div>
       )}
