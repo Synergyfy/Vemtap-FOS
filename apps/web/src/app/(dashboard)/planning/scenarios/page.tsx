@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import {
-  Plus, Trash2, TrendingUp, TrendingDown,
+  Plus, Trash2, TrendingUp, TrendingDown, RotateCcw, Check,
   Target, Megaphone, Tag,
   Monitor, Building2, Wrench, Zap, ChevronDown,
   ChevronUp, ArrowRight, BarChart3,
@@ -251,7 +251,27 @@ export default function ScenariosPage() {
     setScenarios((prev) => prev.map((s) => (s.id === scenarioId ? { ...s, items: [...s.items, { id: uid(), name: "", type: "expense" as const, amount: 0, frequency: "monthly" as const, locked: false }] } : s)));
   }, []);
 
+  const DEFAULT_PLANS: Omit<IncomeSource, "id">[] = [
+    { name: "Silver Subscription", amount: 200 * 8000, frequency: "monthly", growth: 0, active: true, unitPrice: 8000, customers: 200 },
+    { name: "Gold Subscription", amount: 100 * 15000, frequency: "monthly", growth: 0, active: true, unitPrice: 15000, customers: 100 },
+    { name: "Platinum Subscription", amount: 42 * 30000, frequency: "monthly", growth: 0, active: true, unitPrice: 30000, customers: 42 },
+    { name: "Enterprise Subscription", amount: 10 * 100000, frequency: "monthly", growth: 0, active: true, unitPrice: 100000, customers: 10 },
+  ];
+  const [showPlanPicker, setShowPlanPicker] = useState(false);
+  const [selectedPlans, setSelectedPlans] = useState<Set<number>>(new Set([0, 1, 2, 3]));
   const addIncome = () => setIncomes((prev) => [...prev, { id: uid(), name: "", amount: 0, frequency: "monthly", growth: 0, active: true }]);
+  const addDefaultPlans = (indices: number[]) => setIncomes((prev) => {
+    const names = new Set(prev.map((i) => i.name));
+    return [...prev, ...indices.filter((i) => !names.has(DEFAULT_PLANS[i].name)).map((i) => ({ id: uid(), ...DEFAULT_PLANS[i] }))];
+  });
+  const togglePlan = (i: number) => setSelectedPlans((prev) => { const next = new Set(prev); if (next.has(i)) next.delete(i); else next.add(i); return next; });
+  const pickerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showPlanPicker) return;
+    const handler = (e: MouseEvent) => { if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setShowPlanPicker(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showPlanPicker]);
   const updateIncome = (id: string, upd: Partial<IncomeSource>) => {
     setIncomes((prev) => prev.map((i) => {
       if (i.id !== id) return i;
@@ -358,9 +378,39 @@ export default function ScenariosPage() {
                 onUnitPriceChange={inc.unitPrice !== undefined ? (v) => updateIncome(inc.id, { unitPrice: v }) : undefined}
                 onCustomersChange={inc.customers !== undefined ? (v) => updateIncome(inc.id, { customers: v }) : undefined} />
             ))}
-            <button onClick={addIncome} className="w-full py-3 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl text-sm text-zinc-400 hover:text-emerald-500 hover:border-emerald-300 dark:hover:border-emerald-700 transition-colors flex items-center justify-center gap-2">
-              <Plus className="w-4 h-4" /> Add Income Source
-            </button>
+            <div className="flex gap-3">
+              <button onClick={addIncome} className="flex-1 py-3 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl text-sm text-zinc-400 hover:text-emerald-500 hover:border-emerald-300 dark:hover:border-emerald-700 transition-colors flex items-center justify-center gap-2">
+                <Plus className="w-4 h-4" /> Add Income Source
+              </button>
+              <div className="relative shrink-0" ref={pickerRef}>
+                <button onClick={() => setShowPlanPicker(!showPlanPicker)} className="py-3 px-4 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm text-zinc-500 hover:text-emerald-600 hover:border-emerald-300 dark:hover:border-emerald-700 transition-colors flex items-center justify-center gap-2 whitespace-nowrap">
+                  <RotateCcw className="w-4 h-4" /> Default Plans
+                </button>
+                {showPlanPicker && (
+                  <div className="absolute right-0 top-full mt-2 z-50 w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-xl p-3 space-y-2">
+                    {DEFAULT_PLANS.map((plan, i) => (
+                      <label key={plan.name} className="flex items-start gap-3 p-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-colors">
+                        <input type="checkbox" checked={selectedPlans.has(i)} onChange={() => togglePlan(i)}
+                          className="mt-0.5 w-4 h-4 rounded border-zinc-300 dark:border-zinc-600 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{plan.name}</div>
+                          <div className="text-xs text-zinc-500 mt-0.5">{plan.customers} customers × ₦{plan.unitPrice!.toLocaleString()}</div>
+                        </div>
+                        <div className="ml-auto text-sm font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">₦{(plan.unitPrice! * plan.customers!).toLocaleString()}</div>
+                      </label>
+                    ))}
+                    <div className="flex gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-700">
+                      <button onClick={() => { addDefaultPlans(Array.from(selectedPlans)); setShowPlanPicker(false); }}
+                        className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                        <Check className="w-4 h-4" /> Add ({selectedPlans.size})
+                      </button>
+                      <button onClick={() => setShowPlanPicker(false)}
+                        className="py-2 px-3 text-sm text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors">Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </SectionCard>
 
           {/* ════════ 2. MONEY GOING OUT ════════ */}
