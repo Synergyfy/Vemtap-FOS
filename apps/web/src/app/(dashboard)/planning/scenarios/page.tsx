@@ -131,6 +131,15 @@ function generateItems(params: ScenarioParams): ScenarioLineItem[] {
     case "hire-sales": {
       items.push({ id: uid(), name: "Salaries", type: "expense", amount: params.count * params.salary, frequency: "monthly", locked: true });
       items.push({ id: uid(), name: "Allowances", type: "expense", amount: params.count * params.allowance, frequency: "monthly", locked: true });
+      const silverCx = Math.round(params.target * (params.silverPct / 100));
+      const goldCx = Math.round(params.target * (params.goldPct / 100));
+      const platinumCx = Math.round(params.target * (params.platinumPct / 100));
+      const enterpriseCx = Math.round(params.target * (params.enterprisePct / 100));
+      const revenue = silverCx * 8000 + goldCx * 15000 + platinumCx * 30000 + enterpriseCx * 100000;
+      let commission = 0;
+      if (params.commission.type === "percentage") commission = revenue * (params.commission.rate / 100);
+      else commission = params.commission.rate;
+      items.push({ id: uid(), name: "Commission", type: "expense", amount: commission, frequency: "monthly", locked: true });
       break;
     }
     case "hire-developer":
@@ -274,8 +283,8 @@ export default function ScenariosPage() {
     setScenarios((prev) => prev.map((s) => (s.id === id ? { ...s, params, items: generateItems(params) } : s)));
   }, []);
 
-  const updateItem = useCallback((scenarioId: string, itemId: string, amount: number) => {
-    setScenarios((prev) => prev.map((s) => (s.id === scenarioId ? { ...s, items: s.items.map((it) => (it.id === itemId ? { ...it, amount, locked: false } : it)) } : s)));
+  const updateItem = useCallback((scenarioId: string, itemId: string, updates: Partial<ScenarioLineItem>) => {
+    setScenarios((prev) => prev.map((s) => (s.id === scenarioId ? { ...s, items: s.items.map((it) => (it.id === itemId ? { ...it, ...updates, ...(updates.amount !== undefined ? { locked: false } : {}) } : it)) } : s)));
   }, []);
 
   const removeItem = useCallback((scenarioId: string, itemId: string) => {
@@ -358,6 +367,13 @@ export default function ScenariosPage() {
 
   /* ──────── Scenario totals ──────── */
 
+  const activeIncomesResolved = useMemo(() => {
+    return incomes.filter((i) => i.active).map((i) => ({
+      ...i,
+      monthlyAmount: toMonthly(resolveAmount(i, incomes), i.frequency),
+    }));
+  }, [incomes, resolveAmount]);
+
   const scenarioTotals = useMemo(() => {
     let monthlyRevenue = 0, monthlyExpense = 0, oneTimeRevenue = 0, oneTimeExpense = 0;
     const allItems: { scenarioId: string; scenarioLabel: string; item: ScenarioLineItem }[] = [];
@@ -383,7 +399,7 @@ export default function ScenariosPage() {
     const roi = tsc > 0 ? ((tsr - tsc) / tsc) * 100 : 0;
     return {
       totalMonthlyIncome: tmi, totalMonthlyExpense: tme, netMonthly, netAnnual, cashFlow, breakEvenMonths, roi,
-      revenueIncrease: scenarioTotals.monthlyRevenue,
+      revenueIncrease: baseIncome.monthly,
       expenseIncrease: scenarioTotals.monthlyExpense + (scenarioTotals.oneTimeExpense > 0 ? scenarioTotals.oneTimeExpense / 12 : 0),
       profitDifference: netMonthly - baseNetMonthly,
     };
@@ -406,11 +422,50 @@ export default function ScenariosPage() {
 
   return (
     <div className="space-y-8 pb-8">
-      <div>
+      <div className="relative">
         <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
           <BarChart3 className="w-6 h-6 text-blue-500" /> Scenarios
         </h1>
         <p className="text-zinc-500">Test business decisions and instantly see the financial impact.</p>
+
+        {/* ──────── Saved Plans ──────── */}
+        <div className="absolute right-0 top-0">
+          <div className="relative">
+            <button onClick={() => setShowSaved(!showSaved)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:shadow-sm transition-all">
+              <RotateCcw className={`w-3 h-3 transition-transform ${showSaved ? "rotate-45" : ""}`} />
+              Saved Plans ({savedScenarios.length})
+              <ChevronDown className={`w-3 h-3 transition-transform ${showSaved ? "rotate-180" : ""}`} />
+            </button>
+            {showSaved && (
+              <div className="absolute right-0 top-full mt-1.5 z-50 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-xl p-2.5 space-y-1">
+                <button onClick={saveSnapshot} className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                  <Save className="w-3.5 h-3.5" /> Save Current Plan
+                </button>
+                <div className="border-t border-zinc-100 dark:border-zinc-800 pt-1">
+                  {savedScenarios.length === 0 ? (
+                    <p className="text-[11px] text-zinc-400 px-2.5 py-1.5">No saved plans yet.</p>
+                  ) : (
+                    [...savedScenarios].reverse().map((s) => (
+                      <div key={s.id} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/60 group transition-colors">
+                        <button onClick={() => loadSaved(s)} className="flex-1 text-left min-w-0">
+                          <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300 truncate">{s.name}</div>
+                          <div className="text-[10px] text-zinc-400">{new Date(s.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+                        </button>
+                        <button onClick={() => exportSaved(s)} className="p-1 text-zinc-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all" title="Export JSON">
+                          <Download className="w-3 h-3" />
+                        </button>
+                        <button onClick={() => deleteSaved(s.id)} className="p-1 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all" title="Delete">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-8 items-start">
@@ -511,7 +566,7 @@ export default function ScenariosPage() {
                     instance={sc}
                     onUpdateParams={(params) => updateParams(sc.id, params)}
                     onRemove={() => removeScenario(sc.id)}
-                    onUpdateItem={(itemId, amount) => updateItem(sc.id, itemId, amount)}
+                    onUpdateItem={(itemId, updates) => updateItem(sc.id, itemId, updates)}
                     onRemoveItem={(itemId) => removeItem(sc.id, itemId)}
                     onAddCustomItem={() => addCustomItem(sc.id)}
                   />
@@ -533,40 +588,6 @@ export default function ScenariosPage() {
               />
             )}
 
-            {/* ──────── Saved Scenarios ──────── */}
-            <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
-              <button onClick={() => setShowSaved(!showSaved)}
-                className="flex items-center gap-2 text-sm font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors">
-                <RotateCcw className={`w-3.5 h-3.5 transition-transform ${showSaved ? "rotate-45" : ""}`} />
-                Saved Plans ({savedScenarios.length})
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showSaved ? "rotate-180" : ""}`} />
-              </button>
-              {showSaved && (
-                <div className="mt-3 space-y-1.5">
-                  <button onClick={saveSnapshot} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                    <Save className="w-4 h-4" /> Save Current Plan
-                  </button>
-                  {savedScenarios.length === 0 ? (
-                    <p className="text-xs text-zinc-400 px-3 py-2">No saved plans yet.</p>
-                  ) : (
-                    [...savedScenarios].reverse().map((s) => (
-                      <div key={s.id} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800/60 group transition-colors">
-                        <button onClick={() => loadSaved(s)} className="flex-1 text-left min-w-0">
-                          <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300 truncate">{s.name}</div>
-                          <div className="text-[11px] text-zinc-400">{new Date(s.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
-                        </button>
-                        <button onClick={() => exportSaved(s)} className="p-1.5 text-zinc-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all" title="Export JSON">
-                          <Download className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => deleteSaved(s.id)} className="p-1.5 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all" title="Delete">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
           </SectionCard>
         </div>
 
@@ -577,6 +598,7 @@ export default function ScenariosPage() {
             baseIncome={baseIncome}
             baseExpense={baseExpense}
             combined={combined}
+            incomes={activeIncomesResolved}
             scenarioItems={scenarioTotals.allItems}
             scenarioCount={scenarios.length}
             runway={runway}
@@ -671,7 +693,7 @@ function ScenarioCard({
   instance: ScenarioInstance;
   onUpdateParams: (p: ScenarioParams) => void;
   onRemove: () => void;
-  onUpdateItem: (itemId: string, amount: number) => void;
+  onUpdateItem: (itemId: string, updates: Partial<ScenarioLineItem>) => void;
   onRemoveItem: (itemId: string) => void;
   onAddCustomItem: () => void;
 }) {
@@ -707,30 +729,18 @@ function ScenarioCard({
         <button onClick={() => setItemsOpen(!itemsOpen)}
           className="flex items-center gap-2 text-xs font-semibold text-zinc-500 uppercase tracking-wider hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors mb-3">
           {itemsOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          Line Items ({instance.items.length})
+          Line Items ({instance.items.filter((i) => i.type === "expense").length})
         </button>
         {itemsOpen && (
           <div className="space-y-1.5">
-            {instance.items.map((item) => (
-              <div key={item.id} className="flex items-center gap-3 group">
-                <span className={`w-2 h-2 rounded-full shrink-0 ${item.type === "revenue" ? "bg-emerald-400" : "bg-red-400"}`} />
-                <span className="text-[11px] text-zinc-400 w-10 shrink-0 font-mono">{item.frequency === "one-time" ? "once" : "mo"}</span>
-                <span className="flex-1 text-sm text-zinc-700 dark:text-zinc-300">{item.name || "Unnamed item"}</span>
-                <span className="text-[11px] text-zinc-400 w-14 text-right">{item.type === "revenue" ? "Revenue" : "Expense"}</span>
-                <div className="relative">
-                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-400 text-[11px]">₦</span>
-                  <input type="number" value={item.amount || ""}
-                    onChange={(e) => onUpdateItem(item.id, Number(e.target.value))}
-                    className={`w-28 h-7 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-4 pr-2 text-xs font-semibold text-right focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${item.type === "revenue" ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`} />
-                </div>
-                {!item.locked && (
-                  <button onClick={() => onRemoveItem(item.id)} className="p-1 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                )}
-                {item.locked && <div className="w-5" />}
-              </div>
-            ))}
+            {instance.items.filter((i) => i.type === "expense").length > 0 && (
+              <>
+                <p className="text-[10px] font-semibold text-red-500 dark:text-red-400 uppercase tracking-wider mt-2 mb-1">Expenses</p>
+                {instance.items.filter((i) => i.type === "expense").map((item) => (
+                  <LineItemRow key={item.id} item={item} onUpdateItem={onUpdateItem} onRemoveItem={onRemoveItem} />
+                ))}
+              </>
+            )}
             <button onClick={onAddCustomItem}
               className="flex items-center gap-1.5 text-xs font-medium text-blue-500 hover:text-blue-600 mt-3">
               <Plus className="w-3.5 h-3.5" /> Add Custom Item
@@ -738,6 +748,38 @@ function ScenarioCard({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ──────── LineItemRow ──────── */
+
+function LineItemRow({ item, onUpdateItem, onRemoveItem }: {
+  item: ScenarioLineItem;
+  onUpdateItem: (itemId: string, updates: Partial<ScenarioLineItem>) => void;
+  onRemoveItem: (itemId: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 group">
+      <span className={`w-2 h-2 rounded-full shrink-0 ${item.type === "revenue" ? "bg-emerald-400" : "bg-red-400"}`} />
+      <span className="text-[11px] text-zinc-400 w-10 shrink-0 font-mono">{item.frequency === "one-time" ? "once" : "mo"}</span>
+      <input type="text" value={item.name}
+        onChange={(e) => onUpdateItem(item.id, { name: e.target.value })}
+        placeholder="Unnamed item"
+        className="flex-1 text-sm text-zinc-700 dark:text-zinc-300 bg-transparent border-b border-transparent hover:border-zinc-300 focus:border-blue-500 focus:outline-none px-0.5 py-0 min-w-0" />
+      <span className="text-[11px] text-zinc-400 w-14 text-right">{item.type === "revenue" ? "Revenue" : "Expense"}</span>
+      <div className="relative">
+        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-400 text-[11px]">₦</span>
+        <input type="number" value={item.amount || ""}
+          onChange={(e) => onUpdateItem(item.id, { amount: Number(e.target.value) })}
+          className={`w-28 h-7 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-4 pr-2 text-xs font-semibold text-right focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${item.type === "revenue" ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`} />
+      </div>
+      {!item.locked && (
+        <button onClick={() => onRemoveItem(item.id)} className="p-1 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Trash2 className="w-3 h-3" />
+        </button>
+      )}
+      {item.locked && <div className="w-5" />}
     </div>
   );
 }
@@ -802,20 +844,6 @@ function ScenarioParamsForm({ params, onChange }: { params: ScenarioParams; onCh
 
 function HireSalesForm({ params, onChange }: { params: ScenarioParams & { type: "hire-sales" }; onChange: (p: ScenarioParams) => void }) {
   const upd = (p: Partial<typeof params>) => onChange({ ...params, ...p });
-  const silverCx = Math.round(params.target * (params.silverPct / 100));
-  const goldCx = Math.round(params.target * (params.goldPct / 100));
-  const platinumCx = Math.round(params.target * (params.platinumPct / 100));
-  const enterpriseCx = Math.round(params.target * (params.enterprisePct / 100));
-  const revenue = silverCx * 8000 + goldCx * 15000 + platinumCx * 30000 + enterpriseCx * 100000;
-  const salaryCost = params.count * params.salary;
-  const allowanceCost = params.count * params.allowance;
-  let commission = 0;
-  if (params.commission.type === "percentage") commission = revenue * (params.commission.rate / 100);
-  else commission = params.commission.rate;
-  const totalCost = salaryCost + allowanceCost + commission;
-  const netProfit = revenue - totalCost;
-  const roi = totalCost > 0 ? (netProfit / totalCost) * 100 : 0;
-  const breakEven = netProfit > 0 ? Math.ceil(totalCost / netProfit) : 999;
 
   return (
     <div className="space-y-5">
@@ -850,21 +878,6 @@ function HireSalesForm({ params, onChange }: { params: ScenarioParams & { type: 
           value={params.commission.rate} onChange={(v) => upd({ commission: { ...params.commission, rate: v } })}
           suffix={params.commission.type === "percentage" ? "%" : ""} />
       </div>
-
-      {/* Inline results */}
-      <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/50 space-y-2">
-        <p className="text-xs font-bold text-blue-700 dark:text-blue-300 uppercase tracking-wider">Scenario Results</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-          <ResultItem label="Revenue Generated" value={FMT(revenue)} />
-          <ResultItem label="Salary Cost" value={FMT(salaryCost)} color="text-red-500" />
-          <ResultItem label="Commission" value={FMT(commission)} color="text-red-500" />
-          <ResultItem label="Net Profit" value={FMT(netProfit)} color={netProfit >= 0 ? "text-emerald-600" : "text-red-500"} />
-          <ResultItem label="ROI" value={`${roi.toFixed(0)}%`} color={roi >= 0 ? "text-emerald-600" : "text-red-500"} />
-          <ResultItem label="Break-even" value={breakEven < 999 ? `${breakEven} mo` : "N/A"} />
-          <ResultItem label="Monthly Profit" value={FMT(netProfit)} color={netProfit >= 0 ? "text-emerald-600" : "text-red-500"} />
-          <ResultItem label="Annual Profit" value={FMT(netProfit * 12)} color={netProfit >= 0 ? "text-emerald-600" : "text-red-500"} />
-        </div>
-      </div>
     </div>
   );
 }
@@ -895,13 +908,8 @@ function GenericHireForm({ params, onChange }: { params: ScenarioParams & { type
 
 function MarketingForm({ params, onChange }: { params: ScenarioParams & { type: "marketing" }; onChange: (p: ScenarioParams) => void }) {
   const upd = (p: Partial<typeof params>) => onChange({ ...params, ...p });
-  const avgRev = (8000 + 15000 + 30000) / 3;
   const cpl = params.leads > 0 ? params.budget / params.leads : 0;
   const cpc = params.businesses > 0 ? params.budget / params.businesses : 0;
-  const expectedRev = params.businesses * avgRev;
-  const expectedProfit = expectedRev - params.budget;
-  const roi = params.budget > 0 ? (expectedProfit / params.budget) * 100 : 0;
-  const breakEven = expectedRev > 0 ? Math.ceil(params.budget / expectedRev) : 999;
 
   return (
     <div className="space-y-4">
@@ -913,15 +921,11 @@ function MarketingForm({ params, onChange }: { params: ScenarioParams & { type: 
       </div>
       <Field label="Expected Businesses (Customers)" value={params.businesses} onChange={(v) => upd({ businesses: v })} min={0} />
 
-      <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/50 space-y-2">
-        <p className="text-xs font-bold text-blue-700 dark:text-blue-300 uppercase tracking-wider">Results</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+      <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 space-y-2">
+        <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Cost Analysis</p>
+        <div className="grid grid-cols-2 sm:grid-cols-2 gap-3 text-sm">
           <ResultItem label="Cost Per Lead" value={FMT(cpl)} />
           <ResultItem label="Cost Per Customer" value={FMT(cpc)} />
-          <ResultItem label="Expected Revenue" value={FMT(expectedRev)} color="text-emerald-600" />
-          <ResultItem label="Expected Profit" value={FMT(expectedProfit)} color={expectedProfit >= 0 ? "text-emerald-600" : "text-red-500"} />
-          <ResultItem label="ROI" value={`${roi.toFixed(0)}%`} color={roi >= 0 ? "text-emerald-600" : "text-red-500"} />
-          <ResultItem label="Break-even" value={breakEven < 999 ? `${breakEven} mo` : "N/A"} />
         </div>
       </div>
     </div>
@@ -977,9 +981,6 @@ function PricingForm({ params, onChange }: { params: ScenarioParams & { type: "c
 function NewProductForm({ params, onChange }: { params: ScenarioParams & { type: "new-product" }; onChange: (p: ScenarioParams) => void }) {
   const upd = (p: Partial<typeof params>) => onChange({ ...params, ...p });
   const totalInvestment = params.devCost + params.launchCost;
-  const annualRev = params.expectedRevenue * 12;
-  const roi = totalInvestment > 0 ? ((annualRev - totalInvestment) / totalInvestment) * 100 : 0;
-  const breakEven = params.expectedRevenue > 0 ? Math.ceil(totalInvestment / params.expectedRevenue) : 999;
 
   return (
     <div className="space-y-4">
@@ -988,14 +989,10 @@ function NewProductForm({ params, onChange }: { params: ScenarioParams & { type:
         <Field label="Launch Cost" value={params.launchCost} onChange={(v) => upd({ launchCost: v })} prefix="₦" />
         <Field label="Expected Monthly Revenue" value={params.expectedRevenue} onChange={(v) => upd({ expectedRevenue: v })} prefix="₦" />
       </div>
-      <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/50 space-y-2">
-        <p className="text-xs font-bold text-blue-700 dark:text-blue-300 uppercase tracking-wider">Projection</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+      <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 space-y-2">
+        <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Cost Summary</p>
+        <div className="grid grid-cols-2 gap-3 text-sm">
           <ResultItem label="Total Investment" value={FMT(totalInvestment)} />
-          <ResultItem label="Monthly Revenue" value={FMT(params.expectedRevenue)} color="text-emerald-600" />
-          <ResultItem label="Annual Revenue" value={FMT(annualRev)} color="text-emerald-600" />
-          <ResultItem label="ROI" value={`${roi.toFixed(0)}%`} color={roi >= 0 ? "text-emerald-600" : "text-red-500"} />
-          <ResultItem label="Break-even" value={breakEven < 999 ? `${breakEven} mo` : "N/A"} />
           <ResultItem label="Cash Impact" value={FMT(-totalInvestment)} color="text-red-500" />
         </div>
       </div>
@@ -1007,10 +1004,7 @@ function NewProductForm({ params, onChange }: { params: ScenarioParams & { type:
 
 function EnterpriseForm({ params, onChange }: { params: ScenarioParams & { type: "enterprise-project" }; onChange: (p: ScenarioParams) => void }) {
   const upd = (p: Partial<typeof params>) => onChange({ ...params, ...p });
-  const monthlyRev = params.projectValue / params.duration;
   const monthlyCost = params.cost / params.duration;
-  const monthlyProfit = monthlyRev - monthlyCost;
-  const roi = params.cost > 0 ? ((params.projectValue - params.cost) / params.cost) * 100 : 0;
 
   return (
     <div className="space-y-4">
@@ -1019,13 +1013,11 @@ function EnterpriseForm({ params, onChange }: { params: ScenarioParams & { type:
         <Field label="Duration (months)" value={params.duration} onChange={(v) => upd({ duration: v })} min={1} />
         <Field label="Total Project Cost" value={params.cost} onChange={(v) => upd({ cost: v })} prefix="₦" />
       </div>
-      <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/50 space-y-2">
-        <p className="text-xs font-bold text-blue-700 dark:text-blue-300 uppercase tracking-wider">Results</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-          <ResultItem label="Monthly Revenue" value={FMT(monthlyRev)} color="text-emerald-600" />
+      <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 space-y-2">
+        <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Cost Summary</p>
+        <div className="grid grid-cols-2 gap-3 text-sm">
           <ResultItem label="Monthly Cost" value={FMT(monthlyCost)} color="text-red-500" />
-          <ResultItem label="Monthly Profit" value={FMT(monthlyProfit)} color={monthlyProfit >= 0 ? "text-emerald-600" : "text-red-500"} />
-          <ResultItem label="ROI" value={`${roi.toFixed(0)}%`} color={roi >= 0 ? "text-emerald-600" : "text-red-500"} />
+          <ResultItem label="Total Cost" value={FMT(params.cost)} color="text-red-500" />
         </div>
       </div>
     </div>
@@ -1168,12 +1160,13 @@ function CustomScenarioForm({ params, onChange }: { params: ScenarioParams & { t
 /* ──────── Results Panel ──────── */
 
 function ResultsPanel({
-  verdict, baseIncome, baseExpense, combined, scenarioItems, scenarioCount, runway,
+  verdict, baseIncome, baseExpense, combined, incomes, scenarioItems, scenarioCount, runway,
 }: {
   verdict: { label: string; sub: string; color: string; bg: string };
   baseIncome: { monthly: number; annual: number };
   baseExpense: { monthly: number; annual: number };
   combined: { totalMonthlyIncome: number; totalMonthlyExpense: number; netMonthly: number; netAnnual: number; cashFlow: number; breakEvenMonths: number; roi: number; revenueIncrease: number; expenseIncrease: number; profitDifference: number };
+  incomes: (IncomeSource & { monthlyAmount: number })[];
   scenarioItems: { scenarioId: string; scenarioLabel: string; item: ScenarioLineItem }[];
   scenarioCount: number;
   runway: { runwayMonths?: number; closingCashBalance?: number } | null | undefined;
@@ -1183,6 +1176,7 @@ function ResultsPanel({
   const byScenario = useMemo(() => {
     const map = new Map<string, { label: string; items: ScenarioLineItem[] }>();
     for (const si of scenarioItems) {
+      if (si.item.type !== "expense") continue;
       if (!map.has(si.scenarioId)) map.set(si.scenarioId, { label: si.scenarioLabel, items: [] });
       map.get(si.scenarioId)!.items.push(si.item);
     }
@@ -1234,22 +1228,34 @@ function ResultsPanel({
               <ArrowRight className="w-3 h-3" /> Scenario Impact ({scenarioCount})
             </p>
             <div className="grid grid-cols-2 gap-2">
-              <MiniCard label="Revenue ↑" value={FMT(combined.revenueIncrease)} color="text-emerald-600" />
+              <MiniCard label="Revenue" value={FMT(combined.revenueIncrease)} color="text-emerald-600" />
               <MiniCard label="Expense ↑" value={FMT(combined.expenseIncrease)} color="text-red-500" />
               <MiniCard label="Profit Δ" value={`${combined.profitDifference >= 0 ? "+" : ""}${FMT(combined.profitDifference)}`} color={combined.profitDifference >= 0 ? "text-emerald-600" : "text-red-500"} />
             </div>
+            {incomes.length > 0 && (
+              <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-xl p-3 border border-emerald-200 dark:border-emerald-800/50 space-y-1.5">
+                <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Revenue — Money In</p>
+                {incomes.map((inc) => (
+                  <div key={inc.id} className="flex items-center justify-between text-[11px]">
+                    <span className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                      {inc.name || "Income"}
+                    </span>
+                    <span className="font-semibold text-emerald-600">+{FMT(inc.monthlyAmount)}/mo</span>
+                  </div>
+                ))}
+              </div>
+            )}
             {byScenario.map(([id, { label, items }]) => (
-              <div key={id} className="bg-zinc-50 dark:bg-zinc-800/30 rounded-xl p-3 border border-zinc-100 dark:border-zinc-800 space-y-1.5">
-                <p className="text-[11px] font-semibold text-zinc-500">{label}</p>
+              <div key={id} className="bg-red-50 dark:bg-red-900/10 rounded-xl p-3 border border-red-200 dark:border-red-800/50 space-y-1.5">
+                <p className="text-[11px] font-semibold text-red-500 dark:text-red-400">{label}</p>
                 {items.map((item) => (
                   <div key={item.id} className="flex items-center justify-between text-[11px]">
                     <span className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
-                      <span className={`w-1.5 h-1.5 rounded-full ${item.type === "revenue" ? "bg-emerald-400" : "bg-red-400"}`} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
                       {item.name || "Item"}
                     </span>
-                    <span className={`font-semibold ${item.type === "revenue" ? "text-emerald-600" : "text-red-500"}`}>
-                      {item.type === "revenue" ? "+" : "-"}{FMT(item.amount)}{item.frequency === "monthly" ? "/mo" : ""}
-                    </span>
+                    <span className="font-semibold text-red-500">-{FMT(item.amount)}{item.frequency === "monthly" ? "/mo" : ""}</span>
                   </div>
                 ))}
               </div>
