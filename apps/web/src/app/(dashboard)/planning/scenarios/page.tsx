@@ -41,7 +41,7 @@ interface CustomItem { id: string; type: "income" | "expense" | "investment" | "
 
 type ScenarioParams =
   | { type: "idle" }
-  | { type: "hire-sales"; count: number; salary: number; allowance: number; target: number; silverPct: number; goldPct: number; platinumPct: number; enterprisePct: number; commission: CommissionConfig }
+  | { type: "hire-sales"; count: number; salary: number; allowance: number; target: number; silverPct: number; goldPct: number; platinumPct: number; enterprisePct: number; commission: CommissionConfig; recurringCommissionPct: number }
   | { type: "hire-developer"; count: number; salary: number }
   | { type: "hire-designer"; count: number; salary: number }
   | { type: "hire-support"; count: number; salary: number }
@@ -61,6 +61,7 @@ interface ScenarioLineItem {
   amount: number;
   frequency: "monthly" | "one-time";
   locked: boolean;
+  recurringPct?: number;
 }
 
 interface ScenarioInstance {
@@ -140,6 +141,9 @@ function generateItems(params: ScenarioParams): ScenarioLineItem[] {
       if (params.commission.type === "percentage") commission = revenue * (params.commission.rate / 100);
       else commission = params.commission.rate;
       items.push({ id: uid(), name: "Commission", type: "expense", amount: commission, frequency: "monthly", locked: true });
+      if (params.recurringCommissionPct > 0) {
+        items.push({ id: uid(), name: "Recurring Commission", type: "expense", amount: 0, frequency: "monthly", locked: true, recurringPct: params.recurringCommissionPct });
+      }
       break;
     }
     case "hire-developer":
@@ -199,7 +203,7 @@ function generateItems(params: ScenarioParams): ScenarioLineItem[] {
 
 function defaultParams(type: ScenarioType): ScenarioParams {
   switch (type) {
-    case "hire-sales": return { type: "hire-sales", count: 1, salary: 200_000, allowance: 50_000, target: 50, silverPct: 50, goldPct: 30, platinumPct: 15, enterprisePct: 5, commission: { type: "percentage", rate: 5 } };
+    case "hire-sales": return { type: "hire-sales", count: 1, salary: 200_000, allowance: 50_000, target: 50, silverPct: 50, goldPct: 30, platinumPct: 15, enterprisePct: 5, commission: { type: "percentage", rate: 5 }, recurringCommissionPct: 0 };
     case "hire-developer": return { type: "hire-developer", count: 1, salary: 300_000 };
     case "hire-designer": return { type: "hire-designer", count: 1, salary: 250_000 };
     case "hire-support": return { type: "hire-support", count: 1, salary: 150_000 };
@@ -238,6 +242,10 @@ export default function ScenariosPage() {
   const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>(() => {
     try { return JSON.parse(localStorage.getItem("vemtap-saved") || "[]"); } catch { return []; }
   });
+  const [recurringOn, setRecurringOn] = useState(false);
+  const [recurPeriod, setRecurPeriod] = useState(12);
+  const [recurGrowth, setRecurGrowth] = useState(0);
+  const [recurChurn, setRecurChurn] = useState(0);
 
   const saveSnapshot = useCallback(() => {
     setSavedScenarios((prev) => {
@@ -374,6 +382,13 @@ export default function ScenariosPage() {
     }));
   }, [incomes, resolveAmount]);
 
+  const activeExpensesResolved = useMemo(() => {
+    return expenses.filter((e) => e.active).map((e) => ({
+      ...e,
+      monthlyAmount: toMonthly(resolveAmount(e, expenses), e.frequency),
+    }));
+  }, [expenses, resolveAmount]);
+
   const scenarioTotals = useMemo(() => {
     let monthlyRevenue = 0, monthlyExpense = 0, oneTimeRevenue = 0, oneTimeExpense = 0;
     const allItems: { scenarioId: string; scenarioLabel: string; item: ScenarioLineItem }[] = [];
@@ -428,8 +443,19 @@ export default function ScenariosPage() {
         </h1>
         <p className="text-zinc-500">Test business decisions and instantly see the financial impact.</p>
 
-        {/* ──────── Saved Plans ──────── */}
-        <div className="absolute right-0 top-0">
+        {/* ──────── Header Controls ──────── */}
+        <div className="absolute right-0 top-0 flex items-center gap-2">
+          {/* Recurring Toggle */}
+          <button onClick={() => setRecurringOn(!recurringOn)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+              recurringOn
+                ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 border-violet-300 dark:border-violet-700"
+                : "text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+            }`}>
+            <RotateCcw className={`w-3 h-3 ${recurringOn ? "text-violet-500" : ""}`} />
+            Recurring
+          </button>
+          {/* Saved Plans */}
           <div className="relative">
             <button onClick={() => setShowSaved(!showSaved)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:shadow-sm transition-all">
@@ -452,10 +478,10 @@ export default function ScenariosPage() {
                           <div className="text-xs font-medium text-zinc-700 dark:text-zinc-300 truncate">{s.name}</div>
                           <div className="text-[10px] text-zinc-400">{new Date(s.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
                         </button>
-                        <button onClick={() => exportSaved(s)} className="p-1 text-zinc-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all" title="Export JSON">
+                        <button onClick={() => exportSaved(s)} className="p-1 text-zinc-300 hover:text-blue-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all" title="Export JSON">
                           <Download className="w-3 h-3" />
                         </button>
-                        <button onClick={() => deleteSaved(s.id)} className="p-1 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all" title="Delete">
+                        <button onClick={() => deleteSaved(s.id)} className="p-1 text-zinc-300 hover:text-red-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all" title="Delete">
                           <Trash2 className="w-3 h-3" />
                         </button>
                       </div>
@@ -589,20 +615,47 @@ export default function ScenariosPage() {
             )}
 
           </SectionCard>
+
+          {/* ════════ 4. RECURRING PROJECTION ════════ */}
+          {recurringOn && (
+            <RecurringProjection
+              incomes={activeIncomesResolved}
+              expenses={activeExpensesResolved}
+              scenarioItems={scenarioTotals.allItems.filter((si) => si.item.type === "expense")}
+              period={recurPeriod}
+              growthRate={recurGrowth}
+              churnRate={recurChurn}
+              onPeriodChange={setRecurPeriod}
+              onGrowthRateChange={setRecurGrowth}
+              onChurnRateChange={setRecurChurn}
+            />
+          )}
+
         </div>
 
-        {/* ──── Right Column: Results Panel ──── */}
+        {/* ──── Right Column ──── */}
         <div className="w-full lg:w-80 xl:w-96 shrink-0 sticky top-6">
-          <ResultsPanel
-            verdict={verdict}
-            baseIncome={baseIncome}
-            baseExpense={baseExpense}
-            combined={combined}
-            incomes={activeIncomesResolved}
-            scenarioItems={scenarioTotals.allItems}
-            scenarioCount={scenarios.length}
-            runway={runway}
-          />
+          {recurringOn ? (
+            <RecurringSideSummary
+              incomes={activeIncomesResolved}
+              expenses={activeExpensesResolved}
+              scenarioItems={scenarioTotals.allItems.filter((si) => si.item.type === "expense")}
+              period={recurPeriod}
+              growthRate={recurGrowth}
+              churnRate={recurChurn}
+            />
+          ) : (
+            <ResultsPanel
+              verdict={verdict}
+              baseIncome={baseIncome}
+              baseExpense={baseExpense}
+              combined={combined}
+              incomes={activeIncomesResolved}
+              scenarioItems={scenarioTotals.allItems}
+              scenarioCount={scenarios.length}
+              runway={runway}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -775,7 +828,7 @@ function LineItemRow({ item, onUpdateItem, onRemoveItem }: {
           className={`w-28 h-7 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-4 pr-2 text-xs font-semibold text-right focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${item.type === "revenue" ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`} />
       </div>
       {!item.locked && (
-        <button onClick={() => onRemoveItem(item.id)} className="p-1 text-zinc-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button onClick={() => onRemoveItem(item.id)} className="p-1 text-zinc-300 hover:text-red-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
           <Trash2 className="w-3 h-3" />
         </button>
       )}
@@ -878,6 +931,9 @@ function HireSalesForm({ params, onChange }: { params: ScenarioParams & { type: 
           value={params.commission.rate} onChange={(v) => upd({ commission: { ...params.commission, rate: v } })}
           suffix={params.commission.type === "percentage" ? "%" : ""} />
       </div>
+
+      <Field label="Recurring Commission (%)" value={params.recurringCommissionPct}
+        onChange={(v) => upd({ recurringCommissionPct: v })} suffix="%" />
     </div>
   );
 }
@@ -1267,6 +1323,284 @@ function ResultsPanel({
   );
 }
 
+/* ──────── Recurring Side Summary ──────── */
+
+function RecurringSideSummary({
+  incomes, expenses, scenarioItems, period, growthRate, churnRate,
+}: {
+  incomes: (IncomeSource & { monthlyAmount: number })[];
+  expenses: (ExpenseSource & { monthlyAmount: number })[];
+  scenarioItems: { scenarioId: string; scenarioLabel: string; item: ScenarioLineItem }[];
+  period: number;
+  growthRate: number;
+  churnRate: number;
+}) {
+  const hasIncome = incomes.length > 0;
+  const hasExpenses = expenses.length > 0 || scenarioItems.length > 0;
+  const hasRecurringCommission = scenarioItems.some((si) => (si.item.recurringPct ?? 0) > 0);
+  const totalRecurringPct = scenarioItems.reduce((s, si) => s + (si.item.recurringPct ?? 0), 0);
+
+  const baseRevenue = useMemo(() => incomes.reduce((s, i) => s + i.monthlyAmount, 0), [incomes]);
+  const baseExpenses = useMemo(() => {
+    let total = expenses.reduce((s, e) => s + e.monthlyAmount, 0);
+    for (const si of scenarioItems) {
+      if (si.item.recurringPct && si.item.recurringPct > 0) continue;
+      if (si.item.frequency === "monthly") total += si.item.amount;
+    }
+    return total;
+  }, [expenses, scenarioItems]);
+
+  const months = useMemo(() => {
+    const data: { newRev: number; revenue: number; expenses: number; commission: number; cumExp: number; cumNet: number }[] = [];
+    let runningRev = 0, cumExp = 0;
+    for (let m = 1; m <= period; m++) {
+      const factor = Math.pow(1 + growthRate / 100, m - 1);
+      const newRev = hasIncome ? Math.round(baseRevenue * factor) : 0;
+      const monthlyExp = hasExpenses ? Math.round(baseExpenses * factor) : 0;
+      const retainedRev = Math.round(runningRev * (1 - churnRate / 100));
+      const commission = hasRecurringCommission && m > 1 ? Math.round(retainedRev * totalRecurringPct / 100) : 0;
+      runningRev = retainedRev + newRev;
+      const totalExp = monthlyExp + commission;
+      cumExp += totalExp;
+      data.push({ newRev, revenue: runningRev, expenses: totalExp, commission, cumExp, cumNet: runningRev - totalExp });
+    }
+    return data;
+  }, [baseRevenue, baseExpenses, period, growthRate, churnRate, hasIncome, hasExpenses, hasRecurringCommission, totalRecurringPct]);
+
+  const totals = useMemo(() => {
+    if (months.length === 0) return { totalCumRev: 0, totalExpenses: 0, totalNetCumRev: 0, sumCumRev: 0, totalCommission: 0, sumTargetRev: 0, sumFixedCosts: 0, sumTotalExpenses: 0, sumNetCumRev: 0 };
+    const last = months[months.length - 1];
+    return {
+      totalCumRev: months.reduce((s, m) => s + m.revenue, 0),
+      totalExpenses: last.cumExp,
+      totalNetCumRev: last.revenue - last.cumExp,
+      sumCumRev: months.reduce((s, m) => s + m.revenue, 0),
+      totalCommission: months.reduce((s, m) => s + m.commission, 0),
+      sumTargetRev: months.reduce((s, m) => s + m.newRev, 0),
+      sumFixedCosts: months.reduce((s, m) => s + m.expenses - m.commission, 0),
+      sumTotalExpenses: months.reduce((s, m) => s + m.expenses, 0),
+      sumNetCumRev: months.reduce((s, m) => s + m.cumNet, 0),
+    };
+  }, [months]);
+
+  return (
+    <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+      <div className="p-5 border-b border-zinc-200 dark:border-zinc-800">
+        <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">Recurring Summary</h3>
+        <p className="text-xs text-zinc-500 mt-0.5">{period}-month projection</p>
+      </div>
+      <div className="p-5 space-y-3">
+        {hasIncome && <MiniCard label="Total Target Monthly Rev" value={FMT(totals.sumTargetRev)} color="text-emerald-600" />}
+        {hasIncome && <MiniCard label="Total Cumulative Rev" value={FMT(totals.totalCumRev)} color="text-emerald-600" />}
+        <MiniCard label="Total Fixed Costs" value={FMT(totals.sumFixedCosts)} color="text-red-500" />
+        {hasRecurringCommission && <MiniCard label="Total Recurring Comm" value={FMT(totals.totalCommission)} color="text-orange-500" />}
+        <MiniCard label="Total Expenses" value={FMT(totals.sumTotalExpenses)} color="text-red-500" />
+        <MiniCard label="Total Net Cumulative Rev" value={FMT(totals.sumNetCumRev)} color={totals.sumNetCumRev >= 0 ? "text-emerald-600" : "text-red-500"} />
+      </div>
+    </div>
+  );
+}
+
+/* ──────── Recurring Projection ──────── */
+
+function RecurringProjection({
+  incomes, expenses, scenarioItems, period, growthRate, churnRate, onPeriodChange, onGrowthRateChange, onChurnRateChange,
+}: {
+  incomes: (IncomeSource & { monthlyAmount: number })[];
+  expenses: (ExpenseSource & { monthlyAmount: number })[];
+  scenarioItems: { scenarioId: string; scenarioLabel: string; item: ScenarioLineItem }[];
+  period: number;
+  growthRate: number;
+  churnRate: number;
+  onPeriodChange: (v: number) => void;
+  onGrowthRateChange: (v: number) => void;
+  onChurnRateChange: (v: number) => void;
+}) {
+  const hasIncome = incomes.length > 0;
+  const hasDirectExpenses = expenses.length > 0;
+  const hasScenarioExpenses = scenarioItems.length > 0;
+  const hasExpenses = hasDirectExpenses || hasScenarioExpenses;
+  const hasRecurringCommission = scenarioItems.some((si) => (si.item.recurringPct ?? 0) > 0);
+  const totalRecurringPct = scenarioItems.reduce((s, si) => s + (si.item.recurringPct ?? 0), 0);
+
+  const baseRevenue = useMemo(() => incomes.reduce((s, i) => s + i.monthlyAmount, 0), [incomes]);
+  const baseExpenses = useMemo(() => {
+    let total = expenses.reduce((s, e) => s + e.monthlyAmount, 0);
+    for (const si of scenarioItems) {
+      if ((si.item.recurringPct ?? 0) > 0) continue;
+      if (si.item.frequency === "monthly") total += si.item.amount;
+    }
+    return total;
+  }, [expenses, scenarioItems]);
+
+  const months = useMemo(() => {
+    const data: { month: number; newRev: number; revenue: number; expenses: number; commission: number; cumExp: number; cumNet: number }[] = [];
+    let runningRev = 0, cumExp = 0;
+    for (let m = 1; m <= period; m++) {
+      const factor = Math.pow(1 + growthRate / 100, m - 1);
+      const newRev = hasIncome ? Math.round(baseRevenue * factor) : 0;
+      const monthlyExp = hasExpenses ? Math.round(baseExpenses * factor) : 0;
+      const retainedRev = Math.round(runningRev * (1 - churnRate / 100));
+      const commission = hasRecurringCommission && m > 1 ? Math.round(retainedRev * totalRecurringPct / 100) : 0;
+      runningRev = retainedRev + newRev;
+      const totalExp = monthlyExp + commission;
+      cumExp += totalExp;
+      data.push({ month: m, newRev, revenue: runningRev, expenses: totalExp, commission, cumExp, cumNet: runningRev - totalExp });
+    }
+    return data;
+  }, [baseRevenue, baseExpenses, period, growthRate, churnRate, hasIncome, hasExpenses, hasRecurringCommission, totalRecurringPct]);
+
+  const totals = useMemo(() => {
+    if (months.length === 0) return { revenue: 0, expenses: 0, net: 0, totalCumRev: 0, totalNetCumRev: 0, totalCommission: 0, sumTargetRev: 0, sumFixedCosts: 0, sumTotalExpenses: 0, sumNetCumRev: 0 };
+    const last = months[months.length - 1];
+    return {
+      revenue: months.reduce((s, m) => s + m.revenue, 0),
+      expenses: last.cumExp,
+      net: last.cumNet,
+      totalCumRev: months.reduce((s, m) => s + m.revenue, 0),
+      totalNetCumRev: last.revenue - last.cumExp,
+      totalCommission: months.reduce((s, m) => s + m.commission, 0),
+      sumTargetRev: months.reduce((s, m) => s + m.newRev, 0),
+      sumFixedCosts: months.reduce((s, m) => s + m.expenses - m.commission, 0),
+      sumTotalExpenses: months.reduce((s, m) => s + m.expenses, 0),
+      sumNetCumRev: months.reduce((s, m) => s + m.cumNet, 0),
+    };
+  }, [months]);
+
+  const byScenario = useMemo(() => {
+    const map = new Map<string, { label: string; items: ScenarioLineItem[] }>();
+    for (const si of scenarioItems) {
+      if (!map.has(si.scenarioId)) map.set(si.scenarioId, { label: si.scenarioLabel, items: [] });
+      map.get(si.scenarioId)!.items.push(si.item);
+    }
+    return Array.from(map.entries());
+  }, [scenarioItems]);
+
+  return (
+    <SectionCard icon={TrendingUp} iconColor="text-violet-500" title="Recurring Projection" description={`${period}-month compounding projection based on your Money In, Money Out, and Business Decision data.`}>
+      <div className="space-y-4">
+        {/* Controls */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-zinc-500 font-medium mr-1">Period</span>
+            <button onClick={() => onPeriodChange(Math.max(1, period - 1))}
+              className="w-7 h-7 flex items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-sm font-bold">−</button>
+            <input type="number" min={1} value={period || ""}
+              onChange={(e) => { const v = Number(e.target.value); if (v >= 1 || e.target.value === "") onPeriodChange(e.target.value === "" ? 1 : Math.max(1, v)); }}
+              className="w-14 h-7 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs font-semibold text-center focus:outline-none focus:ring-2 focus:ring-violet-500/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+            <button onClick={() => onPeriodChange(period + 1)}
+              className="w-7 h-7 flex items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors text-sm font-bold">+</button>
+            <span className="text-[10px] text-zinc-400 ml-0.5">months</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <label className="text-[10px] text-zinc-500 font-medium">Growth/mo</label>
+              <div className="relative w-20">
+                <input type="number" value={growthRate} onChange={(e) => onGrowthRateChange(e.target.value === "" ? 0 : Math.max(0, Number(e.target.value)))}
+                  className="w-full h-7 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 pr-6 text-xs font-semibold text-right focus:outline-none focus:ring-2 focus:ring-violet-500/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 text-[10px]">%</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-[10px] text-zinc-500 font-medium">Churn/mo</label>
+              <div className="relative w-20">
+                <input type="number" value={churnRate} onChange={(e) => onChurnRateChange(e.target.value === "" ? 0 : Math.max(0, Math.min(100, Number(e.target.value))))}
+                  className="w-full h-7 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 pr-6 text-xs font-semibold text-right focus:outline-none focus:ring-2 focus:ring-violet-500/50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 text-[10px]">%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Summary */}
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+          {hasIncome && <MiniCard label={`Total Target Monthly Rev`} value={FMT(totals.sumTargetRev)} color="text-emerald-600" />}
+          {hasIncome && <MiniCard label={`Total Cumulative Rev`} value={FMT(totals.totalCumRev)} color="text-emerald-600" />}
+          {hasExpenses && <MiniCard label={`Total Fixed Costs`} value={FMT(totals.sumFixedCosts)} color="text-red-500" />}
+          {hasRecurringCommission && <MiniCard label={`Total Recurring Comm`} value={FMT(totals.totalCommission)} color="text-orange-500" />}
+          {hasExpenses && <MiniCard label={`Total Expenses`} value={FMT(totals.sumTotalExpenses)} color="text-red-500" />}
+          <MiniCard label={`Total Net Cumulative Rev`} value={FMT(totals.sumNetCumRev)} color={totals.sumNetCumRev >= 0 ? "text-emerald-600" : "text-red-500"} />
+        </div>
+
+        {/* Income sources summary */}
+        {hasIncome && (
+          <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-xl p-3 border border-emerald-200 dark:border-emerald-800/50 space-y-1">
+            <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Income Sources (base: {FMT(baseRevenue)}/mo)</p>
+            {incomes.map((inc) => (
+              <div key={inc.id} className="flex items-center justify-between text-[11px]">
+                <span className="text-zinc-600 dark:text-zinc-400">{inc.name || "Income"}</span>
+                <span className="font-semibold text-emerald-600">+{FMT(inc.monthlyAmount)}/mo</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Expense sources — Money Out */}
+        {hasDirectExpenses && (
+          <div className="bg-red-50 dark:bg-red-900/10 rounded-xl p-3 border border-red-200 dark:border-red-800/50 space-y-1">
+            <p className="text-[10px] font-semibold text-red-500 dark:text-red-400 uppercase tracking-wider">Money Out — Direct Expenses (base: {FMT(expenses.reduce((s, e) => s + e.monthlyAmount, 0))}/mo)</p>
+            {expenses.map((exp) => (
+              <div key={exp.id} className="flex items-center justify-between text-[11px]">
+                <span className="text-zinc-600 dark:text-zinc-400">{exp.name || "Expense"}</span>
+                <span className="font-semibold text-red-500">-{FMT(exp.monthlyAmount)}/mo</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Expense sources — Business Decision scenarios */}
+        {hasScenarioExpenses && byScenario.map(([id, { label, items }]) => (
+          <div key={id} className="bg-red-50 dark:bg-red-900/10 rounded-xl p-3 border border-red-200 dark:border-red-800/50 space-y-1">
+            <p className="text-[10px] font-semibold text-red-500 dark:text-red-400 uppercase tracking-wider">{label} (base: {FMT(items.reduce((s, it) => s + (it.frequency === "monthly" && !(it.recurringPct ?? 0) ? it.amount : 0), 0))}/mo)</p>
+            {items.filter((it) => it.frequency === "monthly" && !(it.recurringPct ?? 0)).map((item) => (
+              <div key={item.id} className="flex items-center justify-between text-[11px]">
+                <span className="text-zinc-600 dark:text-zinc-400">{item.name || "Item"}</span>
+                <span className="font-semibold text-red-500">-{FMT(item.amount)}/mo</span>
+              </div>
+            ))}
+            {items.filter((it) => (it.recurringPct ?? 0) > 0).map((item) => (
+              <div key={item.id} className="flex items-center justify-between text-[11px]">
+                <span className="text-zinc-600 dark:text-zinc-400">{item.name} ({item.recurringPct}% of retained rev)</span>
+                <span className="font-semibold text-orange-500">variable/mo</span>
+              </div>
+            ))}
+          </div>
+        ))}
+
+        {/* Month-by-month table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
+                <th className="text-left py-1.5 pr-2 font-semibold">Month</th>
+                {hasIncome && <th className="text-right px-1.5 py-1.5 font-semibold text-emerald-600">Target Monthly Rev</th>}
+                {hasIncome && <th className="text-right px-1.5 py-1.5 font-semibold text-emerald-600">Cumulative Rev</th>}
+                {hasExpenses && <th className="text-right px-1.5 py-1.5 font-semibold text-red-500">Fixed Costs</th>}
+                {hasRecurringCommission && <th className="text-right px-1.5 py-1.5 font-semibold text-orange-500">Recurring Comm</th>}
+                {hasExpenses && <th className="text-right px-1.5 py-1.5 font-semibold text-red-500">Expenses</th>}
+                <th className="text-right pl-1.5 py-1.5 font-semibold">Net Cumulative Rev</th>
+              </tr>
+            </thead>
+            <tbody>
+              {months.map((m) => (
+                <tr key={m.month} className="border-b border-zinc-100 dark:border-zinc-800/50">
+                  <td className="py-1.5 pr-2 text-zinc-700 dark:text-zinc-300 font-medium">Month {m.month}</td>
+                  {hasIncome && <td className="text-right px-1.5 py-1.5 text-emerald-600 font-semibold">{FMT(m.newRev)}</td>}
+                  {hasIncome && <td className="text-right px-1.5 py-1.5 text-emerald-600 font-semibold">{FMT(m.revenue)}</td>}
+                  {hasExpenses && <td className="text-right px-1.5 py-1.5 text-red-500">{FMT(m.expenses - m.commission)}</td>}
+                  {hasRecurringCommission && <td className="text-right px-1.5 py-1.5 text-orange-500">{FMT(m.commission)}</td>}
+                  {hasExpenses && <td className="text-right px-1.5 py-1.5 text-red-500 font-semibold">{FMT(m.expenses)}</td>}
+                  <td className={`text-right pl-1.5 py-1.5 font-bold ${m.cumNet >= 0 ? "text-emerald-600" : "text-red-500"}`}>{FMT(m.cumNet)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
 /* ──────── Utility Components ──────── */
 
 function SourceRow({ name, amount, frequency, growth, active, unitPrice, customers, linkedToId, linkedPct, quantity, onNameChange, onAmountChange, onFrequencyChange, onGrowthChange, onActiveChange, onRemove, onUnitPriceChange, onCustomersChange, onLinkedChange, onQuantityChange, allSources }: {
@@ -1307,7 +1641,7 @@ function SourceRow({ name, amount, frequency, growth, active, unitPrice, custome
         <button onClick={() => setOpen(!open)} className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">
           {open ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
-        <button onClick={onRemove} className="p-1 text-zinc-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"><Trash2 className="w-4 h-4" /></button>
+        <button onClick={onRemove} className="p-1 text-zinc-300 hover:text-red-500 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100"><Trash2 className="w-4 h-4" /></button>
       </div>
       {open && (
         <div className="px-4 pb-4 pt-0 border-t border-zinc-100 dark:border-zinc-800">
@@ -1318,13 +1652,15 @@ function SourceRow({ name, amount, frequency, growth, active, unitPrice, custome
                   <label className="block text-[11px] font-medium text-zinc-500 mb-1">Price per Customer</label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-xs">₦</span>
-                    <input type="number" value={unitPrice || ""} onChange={(e) => onUnitPriceChange(Number(e.target.value))}
+                    <input type="text" inputMode="numeric" value={unitPrice ? unitPrice.toLocaleString() : ""}
+                      onChange={(e) => onUnitPriceChange(Number(e.target.value.replace(/,/g, '')))}
                       className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-7 pr-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
                   </div>
                 </div>
                 <div>
                   <label className="block text-[11px] font-medium text-zinc-500 mb-1">Number of Customers</label>
-                  <input type="number" value={customers || ""} onChange={(e) => onCustomersChange(Number(e.target.value))}
+                  <input type="text" inputMode="numeric" value={customers ? customers.toLocaleString() : ""}
+                    onChange={(e) => onCustomersChange(Number(e.target.value.replace(/,/g, '')))}
                     className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
                 </div>
                 <div>
@@ -1446,12 +1782,32 @@ function SourceRow({ name, amount, frequency, growth, active, unitPrice, custome
 function Field({ label, value, onChange, min, prefix, suffix }: {
   label: string; value: number; onChange: (v: number) => void; min?: number; prefix?: string; suffix?: string;
 }) {
+  const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  const display = focused ? draft : (value === 0 && min !== undefined ? "" : value.toLocaleString());
+
   return (
     <div>
       <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">{label}</label>
       <div className="relative">
         {prefix && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm font-medium">{prefix}</span>}
-        <input type="number" value={value || ""} onChange={(e) => onChange(min !== undefined ? Math.max(min, Number(e.target.value)) : Number(e.target.value))}
+        <input type="text" inputMode="numeric" value={display}
+          onFocus={() => { setFocused(true); setDraft(value === 0 ? "" : String(value)); }}
+          onChange={(e) => {
+            const raw = e.target.value.replace(/,/g, '');
+            setDraft(raw);
+            if (raw === '' || raw === '-') return;
+            const num = Number(raw);
+            if (!isNaN(num)) onChange(num);
+          }}
+          onBlur={() => {
+            setFocused(false);
+            const raw = draft.replace(/,/g, '');
+            if (raw === '' || raw === '-') { const fb = min ?? 0; onChange(fb); return; }
+            const num = Number(raw);
+            if (!isNaN(num)) onChange(min !== undefined ? Math.max(min, num) : num);
+          }}
           className={`w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${prefix ? "pl-8" : "pl-3"} pr-3`} />
         {suffix && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm">{suffix}</span>}
       </div>
@@ -1460,10 +1816,30 @@ function Field({ label, value, onChange, min, prefix, suffix }: {
 }
 
 function PctField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  const display = focused ? draft : String(value);
+
   return (
     <div>
       <label className="block text-xs text-zinc-500 mb-0.5">{label} (%)</label>
-      <input type="number" value={value || ""} onChange={(e) => onChange(Math.max(0, Math.min(100, Number(e.target.value))))}
+      <input type="text" inputMode="numeric" value={display}
+        onFocus={() => { setFocused(true); setDraft(String(value)); }}
+        onChange={(e) => {
+          const raw = e.target.value.replace(/,/g, '');
+          setDraft(raw);
+          if (raw === '' || raw === '-') return;
+          const num = Number(raw);
+          if (!isNaN(num)) onChange(Math.max(0, Math.min(100, num)));
+        }}
+        onBlur={() => {
+          setFocused(false);
+          const raw = draft.replace(/,/g, '');
+          if (raw === '' || raw === '-') { onChange(0); return; }
+          const num = Number(raw);
+          if (!isNaN(num)) onChange(Math.max(0, Math.min(100, num)));
+        }}
         className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm font-semibold text-center focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
     </div>
   );
