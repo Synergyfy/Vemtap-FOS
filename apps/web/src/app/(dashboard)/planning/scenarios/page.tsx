@@ -41,7 +41,7 @@ interface CustomItem { id: string; type: "income" | "expense" | "investment" | "
 
 type ScenarioParams =
   | { type: "idle" }
-  | { type: "hire-sales"; count: number; salary: number; allowance: number; target: number; silverPct: number; goldPct: number; platinumPct: number; enterprisePct: number; commission: CommissionConfig; recurringCommissionPct: number }
+  | { type: "hire-sales"; count: number; salary: number; allowance: number; target: number; commission: CommissionConfig; recurringCommissionPct: number }
   | { type: "hire-developer"; count: number; salary: number }
   | { type: "hire-designer"; count: number; salary: number }
   | { type: "hire-support"; count: number; salary: number }
@@ -132,14 +132,9 @@ function generateItems(params: ScenarioParams): ScenarioLineItem[] {
     case "hire-sales": {
       items.push({ id: uid(), name: "Salaries", type: "expense", amount: params.count * params.salary, frequency: "monthly", locked: true });
       items.push({ id: uid(), name: "Allowances", type: "expense", amount: params.count * params.allowance, frequency: "monthly", locked: true });
-      const silverCx = Math.round(params.target * (params.silverPct / 100));
-      const goldCx = Math.round(params.target * (params.goldPct / 100));
-      const platinumCx = Math.round(params.target * (params.platinumPct / 100));
-      const enterpriseCx = Math.round(params.target * (params.enterprisePct / 100));
-      const revenue = silverCx * 8000 + goldCx * 15000 + platinumCx * 30000 + enterpriseCx * 100000;
       let commission = 0;
-      if (params.commission.type === "percentage") commission = revenue * (params.commission.rate / 100);
-      else commission = params.commission.rate;
+      if (params.commission.type === "percentage") commission = params.target * params.count * (params.commission.rate / 100);
+      else commission = params.commission.rate * params.count;
       items.push({ id: uid(), name: "Commission", type: "expense", amount: commission, frequency: "monthly", locked: true });
       if (params.recurringCommissionPct > 0) {
         items.push({ id: uid(), name: "Recurring Commission", type: "expense", amount: 0, frequency: "monthly", locked: true, recurringPct: params.recurringCommissionPct });
@@ -203,7 +198,7 @@ function generateItems(params: ScenarioParams): ScenarioLineItem[] {
 
 function defaultParams(type: ScenarioType): ScenarioParams {
   switch (type) {
-    case "hire-sales": return { type: "hire-sales", count: 1, salary: 200_000, allowance: 50_000, target: 50, silverPct: 50, goldPct: 30, platinumPct: 15, enterprisePct: 5, commission: { type: "percentage", rate: 5 }, recurringCommissionPct: 0 };
+    case "hire-sales": return { type: "hire-sales", count: 1, salary: 200_000, allowance: 50_000, target: 50, commission: { type: "fixed", rate: 5_000 }, recurringCommissionPct: 0 };
     case "hire-developer": return { type: "hire-developer", count: 1, salary: 300_000 };
     case "hire-designer": return { type: "hire-designer", count: 1, salary: 250_000 };
     case "hire-support": return { type: "hire-support", count: 1, salary: 150_000 };
@@ -904,17 +899,7 @@ function HireSalesForm({ params, onChange }: { params: ScenarioParams & { type: 
         <Field label="Number of Sales People" value={params.count} onChange={(v) => upd({ count: v })} min={1} />
         <Field label="Monthly Salary" value={params.salary} onChange={(v) => upd({ salary: v })} prefix="₦" />
         <Field label="Monthly Allowance" value={params.allowance} onChange={(v) => upd({ allowance: v })} prefix="₦" />
-        <Field label="Monthly Target (Businesses)" value={params.target} onChange={(v) => upd({ target: v })} min={1} />
-      </div>
-
-      <div>
-        <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Expected Subscription Mix</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <PctField label="Silver" value={params.silverPct} onChange={(v) => upd({ silverPct: v })} />
-          <PctField label="Gold" value={params.goldPct} onChange={(v) => upd({ goldPct: v })} />
-          <PctField label="Platinum" value={params.platinumPct} onChange={(v) => upd({ platinumPct: v })} />
-          <PctField label="Enterprise" value={params.enterprisePct} onChange={(v) => upd({ enterprisePct: v })} />
-        </div>
+        <Field label="Monthly Target (Customers)" value={params.target} onChange={(v) => upd({ target: v })} min={1} />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -927,7 +912,7 @@ function HireSalesForm({ params, onChange }: { params: ScenarioParams & { type: 
             <option value="fixed">Fixed Amount (₦)</option>
           </select>
         </div>
-        <Field label={params.commission.type === "percentage" ? "Commission Rate (%)" : "Fixed Commission (₦)"}
+        <Field label={params.commission.type === "percentage" ? "Commission Rate (% of target)" : "Commission per Person (₦)"}
           value={params.commission.rate} onChange={(v) => upd({ commission: { ...params.commission, rate: v } })}
           suffix={params.commission.type === "percentage" ? "%" : ""} />
       </div>
@@ -1811,36 +1796,6 @@ function Field({ label, value, onChange, min, prefix, suffix }: {
           className={`w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${prefix ? "pl-8" : "pl-3"} pr-3`} />
         {suffix && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm">{suffix}</span>}
       </div>
-    </div>
-  );
-}
-
-function PctField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
-  const [focused, setFocused] = useState(false);
-  const [draft, setDraft] = useState("");
-
-  const display = focused ? draft : String(value);
-
-  return (
-    <div>
-      <label className="block text-xs text-zinc-500 mb-0.5">{label} (%)</label>
-      <input type="text" inputMode="numeric" value={display}
-        onFocus={() => { setFocused(true); setDraft(String(value)); }}
-        onChange={(e) => {
-          const raw = e.target.value.replace(/,/g, '');
-          setDraft(raw);
-          if (raw === '' || raw === '-') return;
-          const num = Number(raw);
-          if (!isNaN(num)) onChange(Math.max(0, Math.min(100, num)));
-        }}
-        onBlur={() => {
-          setFocused(false);
-          const raw = draft.replace(/,/g, '');
-          if (raw === '' || raw === '-') { onChange(0); return; }
-          const num = Number(raw);
-          if (!isNaN(num)) onChange(Math.max(0, Math.min(100, num)));
-        }}
-        className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm font-semibold text-center focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
     </div>
   );
 }
