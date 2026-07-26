@@ -41,7 +41,7 @@ interface CustomItem { id: string; type: "income" | "expense" | "investment" | "
 
 type ScenarioParams =
   | { type: "idle" }
-  | { type: "hire-sales"; count: number; salary: number; allowance: number; target: number; silverPct: number; goldPct: number; platinumPct: number; enterprisePct: number; commission: CommissionConfig; recurringCommissionPct: number }
+  | { type: "hire-sales"; count: number; salary: number; allowance: number; commission: CommissionConfig; recurringCommissionPct: number }
   | { type: "hire-developer"; count: number; salary: number }
   | { type: "hire-designer"; count: number; salary: number }
   | { type: "hire-support"; count: number; salary: number }
@@ -62,6 +62,7 @@ interface ScenarioLineItem {
   frequency: "monthly" | "one-time";
   locked: boolean;
   recurringPct?: number;
+  commissionPct?: number;
 }
 
 interface ScenarioInstance {
@@ -131,16 +132,11 @@ function generateItems(params: ScenarioParams): ScenarioLineItem[] {
     case "idle": break;
     case "hire-sales": {
       items.push({ id: uid(), name: "Salaries", type: "expense", amount: params.count * params.salary, frequency: "monthly", locked: true });
-      items.push({ id: uid(), name: "Allowances", type: "expense", amount: params.count * params.allowance, frequency: "monthly", locked: true });
-      const silverCx = Math.round(params.target * (params.silverPct / 100));
-      const goldCx = Math.round(params.target * (params.goldPct / 100));
-      const platinumCx = Math.round(params.target * (params.platinumPct / 100));
-      const enterpriseCx = Math.round(params.target * (params.enterprisePct / 100));
-      const revenue = silverCx * 8000 + goldCx * 15000 + platinumCx * 30000 + enterpriseCx * 100000;
-      let commission = 0;
-      if (params.commission.type === "percentage") commission = revenue * (params.commission.rate / 100);
-      else commission = params.commission.rate;
-      items.push({ id: uid(), name: "Commission", type: "expense", amount: commission, frequency: "monthly", locked: true });
+      if (params.commission.type === "percentage") {
+        items.push({ id: uid(), name: "Commission", type: "expense", amount: 0, frequency: "monthly", locked: true, commissionPct: params.commission.rate });
+      } else {
+        items.push({ id: uid(), name: "Commission", type: "expense", amount: params.commission.rate * params.count, frequency: "monthly", locked: true });
+      }
       if (params.recurringCommissionPct > 0) {
         items.push({ id: uid(), name: "Recurring Commission", type: "expense", amount: 0, frequency: "monthly", locked: true, recurringPct: params.recurringCommissionPct });
       }
@@ -203,7 +199,7 @@ function generateItems(params: ScenarioParams): ScenarioLineItem[] {
 
 function defaultParams(type: ScenarioType): ScenarioParams {
   switch (type) {
-    case "hire-sales": return { type: "hire-sales", count: 1, salary: 200_000, allowance: 50_000, target: 50, silverPct: 50, goldPct: 30, platinumPct: 15, enterprisePct: 5, commission: { type: "percentage", rate: 5 }, recurringCommissionPct: 0 };
+    case "hire-sales": return { type: "hire-sales", count: 1, salary: 200_000, allowance: 50_000, commission: { type: "fixed", rate: 5_000 }, recurringCommissionPct: 0 };
     case "hire-developer": return { type: "hire-developer", count: 1, salary: 300_000 };
     case "hire-designer": return { type: "hire-designer", count: 1, salary: 250_000 };
     case "hire-support": return { type: "hire-support", count: 1, salary: 150_000 };
@@ -392,15 +388,21 @@ export default function ScenariosPage() {
   const scenarioTotals = useMemo(() => {
     let monthlyRevenue = 0, monthlyExpense = 0, oneTimeRevenue = 0, oneTimeExpense = 0;
     const allItems: { scenarioId: string; scenarioLabel: string; item: ScenarioLineItem }[] = [];
+    const totalBaseIncome = activeIncomesResolved.reduce((s, i) => s + i.monthlyAmount, 0);
     for (const sc of scenarios) {
       for (const item of sc.items) {
         allItems.push({ scenarioId: sc.id, scenarioLabel: sc.label, item });
         if (item.type === "revenue") { if (item.frequency === "one-time") oneTimeRevenue += item.amount; else monthlyRevenue += item.amount; }
-        else { if (item.frequency === "one-time") oneTimeExpense += item.amount; else monthlyExpense += item.amount; }
+        else {
+          if ((item.commissionPct ?? 0) > 0) {
+            monthlyExpense += Math.round(totalBaseIncome * item.commissionPct! / 100);
+          } else if (item.frequency === "one-time") oneTimeExpense += item.amount;
+          else monthlyExpense += item.amount;
+        }
       }
     }
     return { monthlyRevenue, monthlyExpense, oneTimeRevenue, oneTimeExpense, allItems };
-  }, [scenarios]);
+  }, [scenarios, activeIncomesResolved]);
 
   const combined = useMemo(() => {
     const tmi = baseIncome.monthly + scenarioTotals.monthlyRevenue;
@@ -821,12 +823,18 @@ function LineItemRow({ item, onUpdateItem, onRemoveItem }: {
         placeholder="Unnamed item"
         className="flex-1 text-sm text-zinc-700 dark:text-zinc-300 bg-transparent border-b border-transparent hover:border-zinc-300 focus:border-blue-500 focus:outline-none px-0.5 py-0 min-w-0" />
       <span className="text-[11px] text-zinc-400 w-14 text-right">{item.type === "revenue" ? "Revenue" : "Expense"}</span>
-      <div className="relative">
-        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-400 text-[11px]">₦</span>
-        <input type="number" value={item.amount || ""}
-          onChange={(e) => onUpdateItem(item.id, { amount: Number(e.target.value) })}
-          className={`w-28 h-7 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-4 pr-2 text-xs font-semibold text-right focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${item.type === "revenue" ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`} />
-      </div>
+      {item.commissionPct != null || item.recurringPct != null ? (
+        <div className="flex items-center justify-end w-28 h-7 text-xs font-semibold text-orange-500">
+          {item.commissionPct ?? item.recurringPct}%
+        </div>
+      ) : (
+        <div className="relative">
+          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-400 text-[11px]">₦</span>
+          <input type="number" value={item.amount || ""}
+            onChange={(e) => onUpdateItem(item.id, { amount: Number(e.target.value) })}
+            className={`w-28 h-7 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg pl-4 pr-2 text-xs font-semibold text-right focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${item.type === "revenue" ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`} />
+        </div>
+      )}
       {!item.locked && (
         <button onClick={() => onRemoveItem(item.id)} className="p-1 text-zinc-300 hover:text-red-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
           <Trash2 className="w-3 h-3" />
@@ -900,24 +908,13 @@ function HireSalesForm({ params, onChange }: { params: ScenarioParams & { type: 
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Field label="Number of Sales People" value={params.count} onChange={(v) => upd({ count: v })} min={1} />
         <Field label="Monthly Salary" value={params.salary} onChange={(v) => upd({ salary: v })} prefix="₦" />
         <Field label="Monthly Allowance" value={params.allowance} onChange={(v) => upd({ allowance: v })} prefix="₦" />
-        <Field label="Monthly Target (Businesses)" value={params.target} onChange={(v) => upd({ target: v })} min={1} />
       </div>
 
-      <div>
-        <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Expected Subscription Mix</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <PctField label="Silver" value={params.silverPct} onChange={(v) => upd({ silverPct: v })} />
-          <PctField label="Gold" value={params.goldPct} onChange={(v) => upd({ goldPct: v })} />
-          <PctField label="Platinum" value={params.platinumPct} onChange={(v) => upd({ platinumPct: v })} />
-          <PctField label="Enterprise" value={params.enterprisePct} onChange={(v) => upd({ enterprisePct: v })} />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
           <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Commission Type</label>
           <select value={params.commission.type}
@@ -927,13 +924,12 @@ function HireSalesForm({ params, onChange }: { params: ScenarioParams & { type: 
             <option value="fixed">Fixed Amount (₦)</option>
           </select>
         </div>
-        <Field label={params.commission.type === "percentage" ? "Commission Rate (%)" : "Fixed Commission (₦)"}
+        <Field label={params.commission.type === "percentage" ? "Commission (% of revenue)" : "Commission per Person (₦)"}
           value={params.commission.rate} onChange={(v) => upd({ commission: { ...params.commission, rate: v } })}
           suffix={params.commission.type === "percentage" ? "%" : ""} />
+        <Field label="Recurring Commission (%)" value={params.recurringCommissionPct}
+          onChange={(v) => upd({ recurringCommissionPct: v })} suffix="%" />
       </div>
-
-      <Field label="Recurring Commission (%)" value={params.recurringCommissionPct}
-        onChange={(v) => upd({ recurringCommissionPct: v })} suffix="%" />
     </div>
   );
 }
@@ -1339,12 +1335,15 @@ function RecurringSideSummary({
   const hasExpenses = expenses.length > 0 || scenarioItems.length > 0;
   const hasRecurringCommission = scenarioItems.some((si) => (si.item.recurringPct ?? 0) > 0);
   const totalRecurringPct = scenarioItems.reduce((s, si) => s + (si.item.recurringPct ?? 0), 0);
+  const hasCommissionPct = scenarioItems.some((si) => (si.item.commissionPct ?? 0) > 0);
+  const totalCommissionPct = scenarioItems.reduce((s, si) => s + (si.item.commissionPct ?? 0), 0);
 
   const baseRevenue = useMemo(() => incomes.reduce((s, i) => s + i.monthlyAmount, 0), [incomes]);
   const baseExpenses = useMemo(() => {
     let total = expenses.reduce((s, e) => s + e.monthlyAmount, 0);
     for (const si of scenarioItems) {
-      if (si.item.recurringPct && si.item.recurringPct > 0) continue;
+      if ((si.item.recurringPct ?? 0) > 0) continue;
+      if ((si.item.commissionPct ?? 0) > 0) continue;
       if (si.item.frequency === "monthly") total += si.item.amount;
     }
     return total;
@@ -1358,14 +1357,15 @@ function RecurringSideSummary({
       const newRev = hasIncome ? Math.round(baseRevenue * factor) : 0;
       const monthlyExp = hasExpenses ? Math.round(baseExpenses * factor) : 0;
       const retainedRev = Math.round(runningRev * (1 - churnRate / 100));
-      const commission = hasRecurringCommission && m > 1 ? Math.round(retainedRev * totalRecurringPct / 100) : 0;
+      const recurringComm = hasRecurringCommission && m > 1 ? Math.round(retainedRev * totalRecurringPct / 100) : 0;
+      const dynamicComm = hasCommissionPct ? Math.round(newRev * totalCommissionPct / 100) : 0;
       runningRev = retainedRev + newRev;
-      const totalExp = monthlyExp + commission;
+      const totalExp = monthlyExp + recurringComm + dynamicComm;
       cumExp += totalExp;
-      data.push({ newRev, revenue: runningRev, expenses: totalExp, commission, cumExp, cumNet: runningRev - totalExp });
+      data.push({ newRev, revenue: runningRev, expenses: totalExp, commission: recurringComm + dynamicComm, cumExp, cumNet: runningRev - totalExp });
     }
     return data;
-  }, [baseRevenue, baseExpenses, period, growthRate, churnRate, hasIncome, hasExpenses, hasRecurringCommission, totalRecurringPct]);
+  }, [baseRevenue, baseExpenses, period, growthRate, churnRate, hasIncome, hasExpenses, hasRecurringCommission, totalRecurringPct, hasCommissionPct, totalCommissionPct]);
 
   const totals = useMemo(() => {
     if (months.length === 0) return { totalCumRev: 0, totalExpenses: 0, totalNetCumRev: 0, sumCumRev: 0, totalCommission: 0, sumTargetRev: 0, sumFixedCosts: 0, sumTotalExpenses: 0, sumNetCumRev: 0 };
@@ -1422,12 +1422,15 @@ function RecurringProjection({
   const hasExpenses = hasDirectExpenses || hasScenarioExpenses;
   const hasRecurringCommission = scenarioItems.some((si) => (si.item.recurringPct ?? 0) > 0);
   const totalRecurringPct = scenarioItems.reduce((s, si) => s + (si.item.recurringPct ?? 0), 0);
+  const hasCommissionPct = scenarioItems.some((si) => (si.item.commissionPct ?? 0) > 0);
+  const totalCommissionPct = scenarioItems.reduce((s, si) => s + (si.item.commissionPct ?? 0), 0);
 
   const baseRevenue = useMemo(() => incomes.reduce((s, i) => s + i.monthlyAmount, 0), [incomes]);
   const baseExpenses = useMemo(() => {
     let total = expenses.reduce((s, e) => s + e.monthlyAmount, 0);
     for (const si of scenarioItems) {
       if ((si.item.recurringPct ?? 0) > 0) continue;
+      if ((si.item.commissionPct ?? 0) > 0) continue;
       if (si.item.frequency === "monthly") total += si.item.amount;
     }
     return total;
@@ -1441,14 +1444,15 @@ function RecurringProjection({
       const newRev = hasIncome ? Math.round(baseRevenue * factor) : 0;
       const monthlyExp = hasExpenses ? Math.round(baseExpenses * factor) : 0;
       const retainedRev = Math.round(runningRev * (1 - churnRate / 100));
-      const commission = hasRecurringCommission && m > 1 ? Math.round(retainedRev * totalRecurringPct / 100) : 0;
+      const recurringComm = hasRecurringCommission && m > 1 ? Math.round(retainedRev * totalRecurringPct / 100) : 0;
+      const dynamicComm = hasCommissionPct ? Math.round(newRev * totalCommissionPct / 100) : 0;
       runningRev = retainedRev + newRev;
-      const totalExp = monthlyExp + commission;
+      const totalExp = monthlyExp + recurringComm + dynamicComm;
       cumExp += totalExp;
-      data.push({ month: m, newRev, revenue: runningRev, expenses: totalExp, commission, cumExp, cumNet: runningRev - totalExp });
+      data.push({ month: m, newRev, revenue: runningRev, expenses: totalExp, commission: recurringComm + dynamicComm, cumExp, cumNet: runningRev - totalExp });
     }
     return data;
-  }, [baseRevenue, baseExpenses, period, growthRate, churnRate, hasIncome, hasExpenses, hasRecurringCommission, totalRecurringPct]);
+  }, [baseRevenue, baseExpenses, period, growthRate, churnRate, hasIncome, hasExpenses, hasRecurringCommission, totalRecurringPct, hasCommissionPct, totalCommissionPct]);
 
   const totals = useMemo(() => {
     if (months.length === 0) return { revenue: 0, expenses: 0, net: 0, totalCumRev: 0, totalNetCumRev: 0, totalCommission: 0, sumTargetRev: 0, sumFixedCosts: 0, sumTotalExpenses: 0, sumNetCumRev: 0 };
@@ -1551,8 +1555,8 @@ function RecurringProjection({
         {/* Expense sources — Business Decision scenarios */}
         {hasScenarioExpenses && byScenario.map(([id, { label, items }]) => (
           <div key={id} className="bg-red-50 dark:bg-red-900/10 rounded-xl p-3 border border-red-200 dark:border-red-800/50 space-y-1">
-            <p className="text-[10px] font-semibold text-red-500 dark:text-red-400 uppercase tracking-wider">{label} (base: {FMT(items.reduce((s, it) => s + (it.frequency === "monthly" && !(it.recurringPct ?? 0) ? it.amount : 0), 0))}/mo)</p>
-            {items.filter((it) => it.frequency === "monthly" && !(it.recurringPct ?? 0)).map((item) => (
+            <p className="text-[10px] font-semibold text-red-500 dark:text-red-400 uppercase tracking-wider">{label} (base: {FMT(items.reduce((s, it) => s + (it.frequency === "monthly" && !(it.recurringPct ?? 0) && !(it.commissionPct ?? 0) ? it.amount : 0), 0))}/mo)</p>
+            {items.filter((it) => it.frequency === "monthly" && !(it.recurringPct ?? 0) && !(it.commissionPct ?? 0)).map((item) => (
               <div key={item.id} className="flex items-center justify-between text-[11px]">
                 <span className="text-zinc-600 dark:text-zinc-400">{item.name || "Item"}</span>
                 <span className="font-semibold text-red-500">-{FMT(item.amount)}/mo</span>
@@ -1560,7 +1564,13 @@ function RecurringProjection({
             ))}
             {items.filter((it) => (it.recurringPct ?? 0) > 0).map((item) => (
               <div key={item.id} className="flex items-center justify-between text-[11px]">
-                <span className="text-zinc-600 dark:text-zinc-400">{item.name} ({item.recurringPct}% of retained rev)</span>
+                <span className="text-zinc-600 dark:text-zinc-400">{item.name} ({(item.recurringPct! / 100).toFixed(2)}% of retained rev)</span>
+                <span className="font-semibold text-orange-500">variable/mo</span>
+              </div>
+            ))}
+            {items.filter((it) => (it.commissionPct ?? 0) > 0).map((item) => (
+              <div key={item.id} className="flex items-center justify-between text-[11px]">
+                <span className="text-zinc-600 dark:text-zinc-400">{item.name} ({(item.commissionPct! / 100).toFixed(2)}% of new rev)</span>
                 <span className="font-semibold text-orange-500">variable/mo</span>
               </div>
             ))}
@@ -1811,36 +1821,6 @@ function Field({ label, value, onChange, min, prefix, suffix }: {
           className={`w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${prefix ? "pl-8" : "pl-3"} pr-3`} />
         {suffix && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm">{suffix}</span>}
       </div>
-    </div>
-  );
-}
-
-function PctField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
-  const [focused, setFocused] = useState(false);
-  const [draft, setDraft] = useState("");
-
-  const display = focused ? draft : String(value);
-
-  return (
-    <div>
-      <label className="block text-xs text-zinc-500 mb-0.5">{label} (%)</label>
-      <input type="text" inputMode="numeric" value={display}
-        onFocus={() => { setFocused(true); setDraft(String(value)); }}
-        onChange={(e) => {
-          const raw = e.target.value.replace(/,/g, '');
-          setDraft(raw);
-          if (raw === '' || raw === '-') return;
-          const num = Number(raw);
-          if (!isNaN(num)) onChange(Math.max(0, Math.min(100, num)));
-        }}
-        onBlur={() => {
-          setFocused(false);
-          const raw = draft.replace(/,/g, '');
-          if (raw === '' || raw === '-') { onChange(0); return; }
-          const num = Number(raw);
-          if (!isNaN(num)) onChange(Math.max(0, Math.min(100, num)));
-        }}
-        className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 text-sm font-semibold text-center focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
     </div>
   );
 }
