@@ -589,6 +589,10 @@ export default function ScenariosPage() {
             )}
 
           </SectionCard>
+
+          {/* ════════ 4. GROWTH PROJECTION ════════ */}
+          <GrowthProjection />
+
         </div>
 
         {/* ──── Right Column: Results Panel ──── */}
@@ -1264,6 +1268,148 @@ function ResultsPanel({
         )}
       </div>
     </div>
+  );
+}
+
+/* ──────── Growth Projection ──────── */
+
+const PROJECTION_PERIODS = [3, 6, 12] as const;
+type ProjectionPeriod = (typeof PROJECTION_PERIODS)[number];
+
+interface MonthData {
+  month: number;
+  newCustomers: number;
+  totalCustomers: number;
+  revenue: number;
+  salaryCost: number;
+  allowanceCost: number;
+  newCommission: number;
+  recurringCommission: number;
+  totalCommission: number;
+  totalExpenses: number;
+  netProfit: number;
+  cumulativeRevenue: number;
+  cumulativeExpenses: number;
+  cumulativeNet: number;
+}
+
+function GrowthProjection() {
+  const [count, setCount] = useState(1);
+  const [salary, setSalary] = useState(200_000);
+  const [allowance, setAllowance] = useState(50_000);
+  const [target, setTarget] = useState(50);
+  const [subPrice, setSubPrice] = useState(15_000);
+  const [newCommRate, setNewCommRate] = useState(5);
+  const [recurringCommRate, setRecurringCommRate] = useState(2);
+  const [period, setPeriod] = useState<ProjectionPeriod>(12);
+  const [open, setOpen] = useState(false);
+
+  const projection = useMemo((): MonthData[] => {
+    const data: MonthData[] = [];
+    let cumRev = 0, cumExp = 0;
+    for (let m = 1; m <= period; m++) {
+      const newCx = target;
+      const totalCx = target * m;
+      const rev = totalCx * subPrice;
+      const newComm = newCx * subPrice * (newCommRate / 100);
+      const recComm = m > 1 ? (totalCx - newCx) * subPrice * (recurringCommRate / 100) : 0;
+      const totalComm = newComm + recComm;
+      const sal = count * salary;
+      const allow = count * allowance;
+      const exp = sal + allow + totalComm;
+      const net = rev - exp;
+      cumRev += rev;
+      cumExp += exp;
+      data.push({
+        month: m, newCustomers: newCx, totalCustomers: totalCx,
+        revenue: rev, salaryCost: sal, allowanceCost: allow,
+        newCommission: newComm, recurringCommission: recComm, totalCommission: totalComm,
+        totalExpenses: exp, netProfit: net,
+        cumulativeRevenue: cumRev, cumulativeExpenses: cumExp, cumulativeNet: cumRev - cumExp,
+      });
+    }
+    return data;
+  }, [count, salary, allowance, target, subPrice, newCommRate, recurringCommRate, period]);
+
+  const totals = useMemo(() => {
+    if (projection.length === 0) return { revenue: 0, expenses: 0, net: 0 };
+    const last = projection[projection.length - 1];
+    return { revenue: last.cumulativeRevenue, expenses: last.cumulativeExpenses, net: last.cumulativeNet };
+  }, [projection]);
+
+  return (
+    <SectionCard icon={TrendingUp} iconColor="text-violet-500" title="Growth Projection" description="Model recurring revenue build-up and expense compounding over time.">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex gap-1 p-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-lg">
+            {PROJECTION_PERIODS.map((p) => (
+              <button key={p} onClick={() => setPeriod(p)}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${period === p ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-50 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}>
+                {p}mo
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setOpen(!open)} className="text-xs font-medium text-violet-500 hover:text-violet-600">
+            {open ? "Hide settings" : "Settings"}
+          </button>
+        </div>
+
+        {open && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 bg-zinc-50 dark:bg-zinc-800/30 rounded-xl border border-zinc-200 dark:border-zinc-700">
+            <Field label="Sales People" value={count} onChange={setCount} min={1} />
+            <Field label="Salary (₦)" value={salary} onChange={setSalary} prefix="₦" />
+            <Field label="Allowance (₦)" value={allowance} onChange={setAllowance} prefix="₦" />
+            <Field label="Monthly Target" value={target} onChange={setTarget} min={1} />
+            <Field label="Sub. Price (₦)" value={subPrice} onChange={setSubPrice} prefix="₦" />
+            <Field label="New Comm. (%)" value={newCommRate} onChange={setNewCommRate} suffix="%" />
+            <Field label="Recurring Comm. (%)" value={recurringCommRate} onChange={setRecurringCommRate} suffix="%" />
+          </div>
+        )}
+
+        {/* Summary */}
+        <div className="grid grid-cols-3 gap-3">
+          <MiniCard label={`Total Revenue (${period}mo)`} value={FMT(totals.revenue)} color="text-emerald-600" />
+          <MiniCard label={`Total Expenses`} value={FMT(totals.expenses)} color="text-red-500" />
+          <MiniCard label={`Net Profit`} value={FMT(totals.net)} color={totals.net >= 0 ? "text-emerald-600" : "text-red-500"} />
+        </div>
+
+        {/* Month-by-month table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
+                <th className="text-left py-1.5 pr-2 font-semibold">Month</th>
+                <th className="text-right px-1.5 py-1.5 font-semibold">New Cx</th>
+                <th className="text-right px-1.5 py-1.5 font-semibold">Total Cx</th>
+                <th className="text-right px-1.5 py-1.5 font-semibold text-emerald-600">Revenue</th>
+                <th className="text-right px-1.5 py-1.5 font-semibold text-red-500">Salary</th>
+                <th className="text-right px-1.5 py-1.5 font-semibold text-red-500">Allow.</th>
+                <th className="text-right px-1.5 py-1.5 font-semibold text-red-500">New Comm</th>
+                <th className="text-right px-1.5 py-1.5 font-semibold text-red-500">Recur Comm</th>
+                <th className="text-right px-1.5 py-1.5 font-semibold">Net</th>
+                <th className="text-right pl-1.5 py-1.5 font-semibold">Cum. Net</th>
+              </tr>
+            </thead>
+            <tbody>
+              {projection.map((m) => (
+                <tr key={m.month} className="border-b border-zinc-100 dark:border-zinc-800/50">
+                  <td className="py-1.5 pr-2 text-zinc-700 dark:text-zinc-300 font-medium">Month {m.month}</td>
+                  <td className="text-right px-1.5 py-1.5 text-zinc-500">{m.newCustomers}</td>
+                  <td className="text-right px-1.5 py-1.5 text-zinc-500">{m.totalCustomers}</td>
+                  <td className="text-right px-1.5 py-1.5 text-emerald-600 font-semibold">{FMT(m.revenue)}</td>
+                  <td className="text-right px-1.5 py-1.5 text-red-500">{FMT(m.salaryCost)}</td>
+                  <td className="text-right px-1.5 py-1.5 text-red-500">{FMT(m.allowanceCost)}</td>
+                  <td className="text-right px-1.5 py-1.5 text-red-500">{FMT(m.newCommission)}</td>
+                  <td className="text-right px-1.5 py-1.5 text-amber-500">{FMT(m.recurringCommission)}</td>
+                  <td className={`text-right px-1.5 py-1.5 font-semibold ${m.netProfit >= 0 ? "text-emerald-600" : "text-red-500"}`}>{FMT(m.netProfit)}</td>
+                  <td className={`text-right pl-1.5 py-1.5 font-bold ${m.cumulativeNet >= 0 ? "text-emerald-600" : "text-red-500"}`}>{FMT(m.cumulativeNet)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </SectionCard>
   );
 }
 
